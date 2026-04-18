@@ -120,7 +120,7 @@ def render_metric_cards(latest: pd.DataFrame) -> None:
 
 def choropleth_map(latest: pd.DataFrame, metric: str) -> go.Figure:
     color_scale = "RdYlGn_r" if metric in {"co2_emissions", "air_quality_index", "emissions_intensity"} else "Viridis"
-    map_background = "#efe6d2"
+    map_background = "#090909"
     fig = px.choropleth(
         latest,
         locations="state_abbr",
@@ -141,24 +141,24 @@ def choropleth_map(latest: pd.DataFrame, metric: str) -> go.Figure:
         height=500,
         paper_bgcolor=map_background,
         plot_bgcolor=map_background,
-        font=dict(color="#2f2a22"),
+        font=dict(color="#f8fafc"),
         coloraxis_colorbar=dict(
-            title=dict(text=METRIC_LABELS.get(metric, metric), font=dict(color="#2f2a22")),
-            tickfont=dict(color="#2f2a22"),
+            title=dict(text=METRIC_LABELS.get(metric, metric), font=dict(color="#f8fafc")),
+            tickfont=dict(color="#f8fafc"),
         ),
     )
     fig.update_geos(
         bgcolor=map_background,
         showland=True,
-        landcolor="#faf6ec",
+        landcolor="#171717",
         showocean=True,
-        oceancolor="#e1d2b8",
+        oceancolor="#050505",
         showlakes=True,
-        lakecolor="#d6c4a7",
+        lakecolor="#111827",
         showcoastlines=True,
-        coastlinecolor="rgba(75, 62, 42, 0.35)",
-        subunitcolor="rgba(75, 62, 42, 0.48)",
-        countrycolor="rgba(75, 62, 42, 0.35)",
+        coastlinecolor="rgba(248, 250, 252, 0.38)",
+        subunitcolor="rgba(248, 250, 252, 0.50)",
+        countrycolor="rgba(248, 250, 252, 0.38)",
     )
     return fig
 
