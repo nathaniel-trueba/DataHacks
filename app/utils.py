@@ -120,6 +120,7 @@ def render_metric_cards(latest: pd.DataFrame) -> None:
 
 def choropleth_map(latest: pd.DataFrame, metric: str) -> go.Figure:
     color_scale = "RdYlGn_r" if metric in {"co2_emissions", "air_quality_index", "emissions_intensity"} else "Viridis"
+    map_background = "#efe6d2"
     fig = px.choropleth(
         latest,
         locations="state_abbr",
@@ -139,16 +140,16 @@ def choropleth_map(latest: pd.DataFrame, metric: str) -> go.Figure:
         dragmode=False,
         margin=dict(l=0, r=0, t=10, b=0),
         height=500,
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color="#31333f"),
+        paper_bgcolor=map_background,
+        plot_bgcolor=map_background,
+        font=dict(color="#111827"),
         coloraxis_colorbar=dict(
-            title=dict(text=METRIC_LABELS.get(metric, metric), font=dict(color="#ffffff")),
-            tickfont=dict(color="#ffffff"),
+            title=dict(text=METRIC_LABELS.get(metric, metric), font=dict(color="#111827")),
+            tickfont=dict(color="#111827"),
         ),
     )
     fig.update_geos(
-        bgcolor="rgba(0,0,0,0)",
+        bgcolor=map_background,
         showland=False,
         showocean=False,
         showlakes=False,
