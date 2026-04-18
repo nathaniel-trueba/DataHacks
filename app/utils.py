@@ -37,6 +37,36 @@ CHART_METRICS = [
 ]
 
 
+def apply_light_mode_background() -> None:
+    """Use a warmer page background in light mode while preserving dark mode."""
+    import streamlit as st
+
+    st.markdown(
+        """
+        <style>
+        .stApp {
+            background-color: #efe6d2;
+        }
+
+        [data-testid="stHeader"] {
+            background-color: rgba(239, 230, 210, 0.92);
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .stApp {
+                background-color: #0e1117;
+            }
+
+            [data-testid="stHeader"] {
+                background-color: rgba(14, 17, 23, 0.92);
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def ensure_mock_data() -> Path:
     """Create the processed parquet file if the repo was freshly cloned."""
     if DATA_PATH.exists():
@@ -120,7 +150,6 @@ def render_metric_cards(latest: pd.DataFrame) -> None:
 
 def choropleth_map(latest: pd.DataFrame, metric: str) -> go.Figure:
     color_scale = "RdYlGn_r" if metric in {"co2_emissions", "air_quality_index", "emissions_intensity"} else "Viridis"
-    map_background = "#efe6d2"
     fig = px.choropleth(
         latest,
         locations="state_abbr",
@@ -140,16 +169,11 @@ def choropleth_map(latest: pd.DataFrame, metric: str) -> go.Figure:
         dragmode=False,
         margin=dict(l=0, r=0, t=10, b=0),
         height=500,
-        paper_bgcolor=map_background,
-        plot_bgcolor=map_background,
-        font=dict(color="#111827"),
-        coloraxis_colorbar=dict(
-            title=dict(text=METRIC_LABELS.get(metric, metric), font=dict(color="#111827")),
-            tickfont=dict(color="#111827"),
-        ),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
     )
     fig.update_geos(
-        bgcolor=map_background,
+        bgcolor="rgba(0,0,0,0)",
         showland=False,
         showocean=False,
         showlakes=False,

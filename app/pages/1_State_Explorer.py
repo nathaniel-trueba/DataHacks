@@ -9,10 +9,18 @@ APP_DIR = Path(__file__).resolve().parents[1]
 if str(APP_DIR) not in sys.path:
     sys.path.append(str(APP_DIR))
 
-from utils import CHART_METRICS, METRIC_LABELS, load_state_timeseries, state_summary, time_series_chart
+from utils import (
+    CHART_METRICS,
+    METRIC_LABELS,
+    apply_light_mode_background,
+    load_state_timeseries,
+    state_summary,
+    time_series_chart,
+)
 
 
 st.set_page_config(page_title="Heat Trace | State Explorer", layout="wide")
+apply_light_mode_background()
 
 st.title("State Explorer")
 st.caption("Compare energy, solar, emissions, and air-quality trends for a selected state.")

@@ -4,6 +4,7 @@ import streamlit as st
 
 from utils import (
     METRIC_LABELS,
+    apply_light_mode_background,
     choropleth_map,
     latest_snapshot,
     load_state_timeseries,
@@ -14,6 +15,7 @@ from utils import (
 
 
 st.set_page_config(page_title="Heat Trace", layout="wide")
+apply_light_mode_background()
 
 st.title("Heat Trace")
 st.caption(
