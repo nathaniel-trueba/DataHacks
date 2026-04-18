@@ -18,6 +18,7 @@ st.caption("Solar permit patterns reveal two very different adoption stories.")
 combined_chart_path = APP_DIR / "assets" / "solar_permit_individual_analysis.png"
 permit_count_chart_path = APP_DIR / "assets" / "top_cities_by_permit_count.png"
 avg_system_chart_path = APP_DIR / "assets" / "top_cities_by_avg_kwh_per_permit.png"
+adoption_time_chart_path = APP_DIR / "assets" / "solar_permit_adoption_over_time.png"
 
 st.image(combined_chart_path, use_container_width=True)
 
@@ -71,4 +72,23 @@ st.write(
     "The other is the big-installer market, where a smaller number of rural or commercial buyers "
     "install very large systems. That distinction matters for modeling: sun exposure alone may not "
     "predict adoption as well as the mix of household demand, property type, incentives, and local economics."
+)
+
+st.divider()
+
+st.subheader("Solar adoption shifted from flatline to breakout")
+st.image(adoption_time_chart_path, use_container_width=True)
+st.write(
+    "From 2018 through 2022, solar adoption was essentially flat, with monthly permit counts "
+    "hovering around only 100-150. Starting in early 2023, the pattern changed: permits spiked "
+    "to roughly 800 in a month, which may line up with Inflation Reduction Act tax credits making "
+    "solar cheaper for homeowners. By 2024 and 2025, adoption was no longer just a one-month spike; "
+    "it became a sustained climb from roughly 400 to 1,400 permits per month."
+)
+st.write(
+    "March 2026 stands out as the major anomaly, peaking at 4,592 permits. That sudden jump could "
+    "reflect a policy deadline, a rush to file before incentives changed, a large data batch upload, "
+    "or a genuine surge in demand. Even after April 2026 falls back to about 1,200 permits, the level "
+    "is still far above the historical baseline, suggesting that the floor for solar adoption has "
+    "permanently moved higher."
 )
