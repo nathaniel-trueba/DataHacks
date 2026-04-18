@@ -20,7 +20,13 @@ st.caption("Compare energy, solar, emissions, and air-quality trends for a selec
 df = load_state_timeseries()
 states = df["state"].drop_duplicates().sort_values().tolist()
 
-selected_state = st.sidebar.selectbox("State", states, index=states.index("California") if "California" in states else 0)
+selector_col, _ = st.columns([1, 2])
+with selector_col:
+    selected_state = st.selectbox(
+        "State",
+        states,
+        index=states.index("California") if "California" in states else 0,
+    )
 state_df = df[df["state"] == selected_state].sort_values("date")
 
 latest = state_df.iloc[-1]
