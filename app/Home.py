@@ -17,7 +17,7 @@ st.set_page_config(page_title="Heat Trace", layout="wide")
 
 st.title("Heat Trace")
 st.caption(
-    "A hackathon-ready data app for exploring how U.S. energy activity, solar adoption, "
+    "A hackathon data app for exploring how U.S. energy activity, solar adoption, "
     "and environmental indicators move together across states."
 )
 
