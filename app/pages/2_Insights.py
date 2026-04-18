@@ -15,9 +15,11 @@ st.set_page_config(page_title="Heat Trace | Insights", layout="wide")
 st.title("Insights")
 st.caption("Solar permit patterns reveal two very different adoption stories.")
 
-permit_chart_path = APP_DIR / "assets" / "solar_permit_individual_analysis.png"
+combined_chart_path = APP_DIR / "assets" / "solar_permit_individual_analysis.png"
+permit_count_chart_path = APP_DIR / "assets" / "top_cities_by_permit_count.png"
+avg_system_chart_path = APP_DIR / "assets" / "top_cities_by_avg_kwh_per_permit.png"
 
-st.image(permit_chart_path, use_container_width=True)
+st.image(combined_chart_path, use_container_width=True)
 
 st.subheader("Tiny towns, huge systems. Big cities, everyday rooftops.")
 st.write(
@@ -39,4 +41,34 @@ st.write("So there are actually two completely different types of solar buyers i
 st.markdown(
     "- **The big installer:** one farm in Point Reyes putting in a 741 kWh system.\n"
     "- **The everyday homeowner:** thousands of Oakland residents each putting in a 7-10 kWh rooftop panel."
+)
+
+st.divider()
+
+st.subheader("Where individual solar buying is happening at scale")
+st.image(permit_count_chart_path, use_container_width=True)
+st.write(
+    "Permit volume shows where lots of individual buyers are entering the solar market. "
+    "Oakland leads by a wide margin with 3,455 permits, while Hanford, Indio, and San Diego "
+    "also show strong adoption. The interesting part is that permit count is not just a "
+    "sun-exposure story: places with very different climates and city sizes can still show "
+    "high solar activity when household demand, incentives, costs, and local permitting line up."
+)
+
+st.subheader("Where system size tells a different story")
+st.image(avg_system_chart_path, use_container_width=True)
+st.write(
+    "Average system size points to a separate type of solar buyer. Cities like Point Reyes "
+    "and Detour have enormous average systems, with Point Reyes reaching 741 kWh per permit "
+    "and Detour reaching 630 kWh. Those numbers are far beyond a typical single-family rooftop "
+    "setup, which suggests farms, ranches, or commercial properties with much larger energy needs."
+)
+
+st.subheader("What this means")
+st.write(
+    "These charts point to two different solar markets. One is the everyday homeowner market, "
+    "where thousands of people in places like Oakland and San Diego install modest rooftop systems. "
+    "The other is the big-installer market, where a smaller number of rural or commercial buyers "
+    "install very large systems. That distinction matters for modeling: sun exposure alone may not "
+    "predict adoption as well as the mix of household demand, property type, incentives, and local economics."
 )
