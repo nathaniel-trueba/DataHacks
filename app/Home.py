@@ -36,7 +36,11 @@ metric = st.selectbox(
 )
 st.caption(metric_help(metric))
 
-st.plotly_chart(choropleth_map(latest, metric), use_container_width=True)
+st.plotly_chart(
+    choropleth_map(latest, metric),
+    use_container_width=True,
+    config={"displayModeBar": False, "scrollZoom": False, "doubleClick": False},
+)
 
 st.subheader(f"Top and bottom states by {METRIC_LABELS[metric].lower()}")
 ranked = ranked_states(latest, metric, n=5)
