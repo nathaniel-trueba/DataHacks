@@ -9,45 +9,34 @@ APP_DIR = Path(__file__).resolve().parents[1]
 if str(APP_DIR) not in sys.path:
     sys.path.append(str(APP_DIR))
 
-from utils import build_insights, dataframe_with_formats, insight_count_chart, load_state_timeseries
-
 
 st.set_page_config(page_title="Heat Trace | Insights", layout="wide")
 
 st.title("Insights")
-st.caption("Rule-based flags that surface interesting state patterns for follow-up analysis.")
+st.caption("Solar permit patterns reveal two very different adoption stories.")
 
-df = load_state_timeseries()
-insights = build_insights(df)
+permit_chart_path = APP_DIR / "assets" / "solar_permit_individual_analysis.png"
 
-if insights.empty:
-    st.info("No insight flags were found in the current dataset.")
-else:
-    cols = st.columns(3)
-    cols[0].metric("Flagged states", insights["State"].nunique())
-    cols[1].metric("Total flags", len(insights))
-    cols[2].metric("Insight types", insights["Insight"].nunique())
+st.image(permit_chart_path, use_container_width=True)
 
-    st.plotly_chart(insight_count_chart(insights), use_container_width=True)
+st.subheader("Tiny towns, huge systems. Big cities, everyday rooftops.")
+st.write(
+    "The cities with the highest average system size, such as Point Reyes at 741 kWh "
+    "and Detour at 630 kWh, are tiny towns most people have not heard of. The cities "
+    "with the most permits, such as Oakland with 3,455 permits and Hanford with 1,776, "
+    "have much smaller average systems around 7-10 kWh."
+)
 
-    selected_flags = st.multiselect(
-        "Filter insight types",
-        options=sorted(insights["Insight"].unique()),
-        default=sorted(insights["Insight"].unique()),
-    )
-    filtered = insights[insights["Insight"].isin(selected_flags)].copy()
+st.subheader("What this means for regular people")
+st.write(
+    "Small rural towns are installing massive solar systems, likely farms, ranches, "
+    "or commercial properties that need huge energy capacity. Meanwhile, big cities "
+    "like Oakland and San Diego have thousands of regular homeowners installing modest "
+    "rooftop panels."
+)
 
-    st.dataframe(
-        dataframe_with_formats(filtered, percent_columns=["Solar growth, 5yr", "CO2 change, 5yr"]),
-        use_container_width=True,
-        hide_index=True,
-    )
-
-with st.expander("Insight rules"):
-    st.write(
-        "- Solar growth increased but emissions did not decrease: five-year solar growth is above 25%, "
-        "while five-year CO2 emissions are flat or higher.\n"
-        "- High pollution and low solar adoption: latest AQI is in the top quartile, while clean ratio is in the bottom quartile.\n"
-        "- Strong solar adoption and improving environmental indicators: latest clean ratio is in the top quartile, "
-        "with falling CO2 emissions and improving AQI over the last five years."
-    )
+st.write("So there are actually two completely different types of solar buyers in this data:")
+st.markdown(
+    "- **The big installer:** one farm in Point Reyes putting in a 741 kWh system.\n"
+    "- **The everyday homeowner:** thousands of Oakland residents each putting in a 7-10 kWh rooftop panel."
+)
