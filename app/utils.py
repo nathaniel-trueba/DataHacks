@@ -44,21 +44,61 @@ def apply_light_mode_background() -> None:
     st.markdown(
         """
         <style>
-        .stApp {
-            background-color: #efe6d2;
-        }
-
-        [data-testid="stHeader"] {
-            background-color: rgba(239, 230, 210, 0.92);
+        :root {
+            --heat-page-bg: hsl(38 48% 88%);
+            --heat-surface-bg: hsl(38 48% 92% / 0.92);
+            --heat-text-color: hsl(222 47% 11%);
+            --heat-border-color: hsl(34 24% 72%);
+            --heat-theme-transition:
+                background-color 240ms ease-in-out,
+                color 240ms ease-in-out,
+                border-color 240ms ease-in-out;
         }
 
         @media (prefers-color-scheme: dark) {
-            .stApp {
-                background-color: #0e1117;
+            :root {
+                --heat-page-bg: var(--background-color, #0e1117);
+                --heat-surface-bg: var(--background-color, #0e1117);
+                --heat-text-color: var(--text-color, #fafafa);
+                --heat-border-color: rgba(250, 250, 250, 0.14);
             }
+        }
 
-            [data-testid="stHeader"] {
-                background-color: rgba(14, 17, 23, 0.92);
+        html,
+        body,
+        .stApp,
+        [data-testid="stAppViewContainer"] {
+            background-color: var(--heat-page-bg);
+            color: var(--heat-text-color);
+            transition: var(--heat-theme-transition);
+        }
+
+        [data-testid="stHeader"],
+        [data-testid="stToolbar"] {
+            background-color: var(--heat-surface-bg);
+            transition: var(--heat-theme-transition);
+        }
+
+        [data-testid="stSidebar"],
+        [data-testid="stSidebarContent"] {
+            background-color: var(--heat-surface-bg);
+            color: var(--heat-text-color);
+            transition: var(--heat-theme-transition);
+        }
+
+        div[data-testid="stMetric"],
+        div[data-testid="stExpander"],
+        div[data-testid="stDataFrame"],
+        div[data-testid="stSelectbox"] {
+            transition: var(--heat-theme-transition);
+        }
+
+        @media (prefers-color-scheme: dark) {
+            [data-testid="stHeader"],
+            [data-testid="stToolbar"],
+            [data-testid="stSidebar"],
+            [data-testid="stSidebarContent"] {
+                background-color: var(--heat-surface-bg);
             }
         }
         </style>
