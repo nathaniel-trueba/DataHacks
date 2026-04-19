@@ -12,7 +12,7 @@ if str(APP_DIR) not in sys.path:
 from utils import (
     CHART_METRICS,
     METRIC_LABELS,
-    apply_light_mode_background,
+    apply_heat_trace_theme,
     load_homepage_map_data,
     load_state_timeseries,
     solar_production_comparison_chart,
@@ -22,7 +22,7 @@ from utils import (
 
 
 st.set_page_config(page_title="Heat Trace | State Explorer", layout="wide")
-apply_light_mode_background()
+apply_heat_trace_theme()
 
 st.title("State Explorer")
 st.caption(

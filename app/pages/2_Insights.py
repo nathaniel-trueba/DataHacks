@@ -9,11 +9,11 @@ APP_DIR = Path(__file__).resolve().parents[1]
 if str(APP_DIR) not in sys.path:
     sys.path.append(str(APP_DIR))
 
-from utils import apply_light_mode_background
+from utils import apply_heat_trace_theme
 
 
 st.set_page_config(page_title="Heat Trace | Insights", layout="wide")
-apply_light_mode_background()
+apply_heat_trace_theme()
 
 st.title("Insights")
 st.caption(

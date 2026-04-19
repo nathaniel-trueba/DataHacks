@@ -18,6 +18,28 @@ US_STATES_GEOJSON_PATH = PROJECT_ROOT / "app" / "assets" / "us-states.json"
 BTU_PER_KWH = 3412.142
 BTU_SERIES_SCALE = 1_000_000_000
 
+HEAT_PRIMARY = "#C0211E"
+HEAT_POPPY = "#E8392A"
+HEAT_TOMATO = "#F55240"
+HEAT_BURNT = "#BF4A1A"
+HEAT_TANGERINE = "#E96225"
+HEAT_BLAZE = "#F57C30"
+HEAT_AMBER = "#F5A623"
+HEAT_BACKGROUND = "#050403"
+HEAT_SURFACE = "#17100E"
+HEAT_TEXT = "#F6ECDD"
+HEAT_MUTED = "#B9A28A"
+HEAT_BORDER = "rgba(232, 57, 42, 0.42)"
+HEAT_CONTINUOUS_SCALE = [
+    [0.0, "#2A1712"],
+    [0.22, HEAT_AMBER],
+    [0.45, HEAT_BLAZE],
+    [0.68, HEAT_TOMATO],
+    [0.85, HEAT_POPPY],
+    [1.0, HEAT_PRIMARY],
+]
+HEAT_COLORWAY = [HEAT_PRIMARY, HEAT_TANGERINE, HEAT_AMBER, HEAT_TOMATO, HEAT_BURNT]
+
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
 
@@ -192,58 +214,141 @@ STATE_CENTROIDS = {
 }
 
 
-def apply_light_mode_background() -> None:
-    """Use a warmer page background in light mode while preserving dark mode."""
+def apply_heat_trace_theme() -> None:
+    """Apply a fixed Heat Trace visual theme across Streamlit pages."""
     import streamlit as st
 
-    is_dark = st.context.theme.get("type") == "dark"
-    page_bg = "var(--background-color, #0e1117)" if is_dark else "hsl(38 48% 88%)"
-    surface_bg = "var(--background-color, #0e1117)" if is_dark else "hsl(38 48% 92% / 0.94)"
-    text_color = "var(--text-color, #fafafa)" if is_dark else "hsl(222 47% 11%)"
-    border_color = "rgba(250, 250, 250, 0.14)" if is_dark else "hsl(34 24% 72%)"
-
     st.markdown(
-        f"""
+        """
         <style>
-        :root {{
-            --heat-page-bg: {page_bg};
-            --heat-surface-bg: {surface_bg};
-            --heat-text-color: {text_color};
-            --heat-border-color: {border_color};
-            --heat-theme-transition:
-                background-color 240ms ease-in-out,
-                color 240ms ease-in-out,
-                border-color 240ms ease-in-out;
-        }}
+        :root {
+            --heat-page-bg: #050403;
+            --heat-surface-bg: #17100E;
+            --heat-surface-strong: #231715;
+            --heat-text-color: #F6ECDD;
+            --heat-muted-color: #B9A28A;
+            --heat-border-color: rgba(232, 57, 42, 0.42);
+            --heat-primary: #C0211E;
+            --heat-poppy: #E8392A;
+            --heat-tomato: #F55240;
+            --heat-burnt: #BF4A1A;
+            --heat-tangerine: #E96225;
+            --heat-blaze: #F57C30;
+            --heat-amber: #F5A623;
+        }
 
         html,
         body,
         .stApp,
-        [data-testid="stAppViewContainer"] {{
+        [data-testid="stAppViewContainer"] {
             background-color: var(--heat-page-bg);
             color: var(--heat-text-color);
-            transition: var(--heat-theme-transition);
-        }}
+        }
 
         [data-testid="stHeader"],
-        [data-testid="stToolbar"] {{
-            background-color: var(--heat-surface-bg);
-            transition: var(--heat-theme-transition);
-        }}
+        [data-testid="stToolbar"] {
+            background-color: var(--heat-page-bg);
+        }
 
         [data-testid="stSidebar"],
-        [data-testid="stSidebarContent"] {{
+        [data-testid="stSidebarContent"] {
             background-color: var(--heat-surface-bg);
             color: var(--heat-text-color);
-            transition: var(--heat-theme-transition);
-        }}
+            border-right: 1px solid var(--heat-border-color);
+        }
 
-        div[data-testid="stMetric"],
+        h1,
+        h2,
+        h3,
+        h4,
+        h5,
+        h6,
+        p,
+        label,
+        span,
+        div {
+            color: var(--heat-text-color);
+        }
+
+        h1 {
+            color: var(--heat-text-color);
+            font-weight: 900;
+            letter-spacing: 0;
+        }
+
+        h2,
+        h3 {
+            color: var(--heat-amber);
+            letter-spacing: 0;
+        }
+
+        [data-testid="stMarkdownContainer"] p,
+        [data-testid="stCaptionContainer"],
+        [data-testid="stMetricLabel"] {
+            color: var(--heat-muted-color);
+        }
+
+        a {
+            color: var(--heat-primary);
+        }
+
+        div[data-testid="stMetric"] {
+            background: linear-gradient(135deg, rgba(23, 16, 14, 0.96), rgba(35, 23, 21, 0.92));
+            border: 1px solid var(--heat-border-color);
+            border-top: 4px solid var(--heat-tangerine);
+            border-radius: 2px;
+            padding: 0.9rem 1rem;
+        }
+
+        div[data-testid="stMetricValue"] {
+            color: var(--heat-amber);
+            font-weight: 900;
+        }
+
         div[data-testid="stExpander"],
         div[data-testid="stDataFrame"],
-        div[data-testid="stSelectbox"] {{
-            transition: var(--heat-theme-transition);
-        }}
+        div[data-testid="stSelectbox"],
+        div[data-testid="stSlider"],
+        div[data-testid="stNumberInput"] {
+            border-color: var(--heat-border-color);
+        }
+
+        div[data-baseweb="select"] > div,
+        input,
+        textarea {
+            background-color: var(--heat-surface-bg);
+            color: var(--heat-text-color);
+            border-color: var(--heat-border-color);
+        }
+
+        .stTabs [data-baseweb="tab-list"] {
+            border-bottom: 1px solid var(--heat-border-color);
+        }
+
+        .stTabs [data-baseweb="tab"] {
+            color: var(--heat-muted-color);
+        }
+
+        .stTabs [aria-selected="true"] {
+            color: var(--heat-amber);
+            border-bottom-color: var(--heat-amber);
+        }
+
+        [data-testid="stAlert"] {
+            background-color: rgba(245, 166, 35, 0.12);
+            border-color: rgba(245, 166, 35, 0.34);
+        }
+
+        button[kind="primary"],
+        div.stButton > button {
+            background-color: var(--heat-primary);
+            border-color: var(--heat-primary);
+            color: var(--heat-text-color);
+        }
+
+        hr {
+            border-color: var(--heat-border-color);
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -385,9 +490,9 @@ def energy_solar_overlay_map(map_df: pd.DataFrame) -> go.Figure:
             geojson=us_states_geojson,
             featureidkey="id",
             z=[1] * len(missing_states),
-            colorscale=[[0, "#9ca3af"], [1, "#9ca3af"]],
+            colorscale=[[0, "#2F2723"], [1, "#2F2723"]],
             showscale=False,
-            marker_line_color="rgba(255, 255, 255, 0.75)",
+            marker_line_color="rgba(246, 236, 221, 0.42)",
             marker_line_width=0.8,
             hovertemplate="%{location}<br>No overlapping data<extra></extra>",
             name="No overlapping data",
@@ -400,10 +505,13 @@ def energy_solar_overlay_map(map_df: pd.DataFrame) -> go.Figure:
             geojson=us_states_geojson,
             featureidkey="id",
             z=energy_df["energy_consumption_kwh"],
-            colorscale="YlOrRd",
-            marker_line_color="rgba(255, 255, 255, 0.85)",
+            colorscale=HEAT_CONTINUOUS_SCALE,
+            marker_line_color="rgba(246, 236, 221, 0.58)",
             marker_line_width=0.9,
-            colorbar=dict(title="Energy consumption (kWh)"),
+            colorbar=dict(
+                title=dict(text="Energy consumption (kWh)", font=dict(color=HEAT_MUTED)),
+                tickfont=dict(color=HEAT_MUTED),
+            ),
             customdata=np.stack([energy_df["solar_display"]], axis=-1),
             hovertemplate=(
                 "%{location}<br>"
@@ -427,8 +535,8 @@ def energy_solar_overlay_map(map_df: pd.DataFrame) -> go.Figure:
                 mode="markers",
                 marker=dict(
                     size=bubble_sizes,
-                    color="rgba(34, 197, 94, 0.62)",
-                    line=dict(color="rgba(17, 24, 39, 0.85)", width=1.2),
+                    color="rgba(245, 166, 35, 0.72)",
+                    line=dict(color=HEAT_BACKGROUND, width=1.2),
                 ),
                 customdata=np.stack([solar_df["solar_production"], solar_df["energy_display"]], axis=-1),
                 hovertemplate=(
@@ -447,6 +555,7 @@ def energy_solar_overlay_map(map_df: pd.DataFrame) -> go.Figure:
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         legend=dict(orientation="h", yanchor="bottom", y=0.0, xanchor="left", x=0.0),
+        font=dict(color=HEAT_TEXT),
     )
     fig.update_geos(
         scope="usa",
@@ -474,7 +583,7 @@ def homepage_rankings(map_df: pd.DataFrame, metric: str, n: int = 5) -> pd.DataF
 
 
 def choropleth_map(latest: pd.DataFrame, metric: str) -> go.Figure:
-    color_scale = "RdYlGn" if metric == "year_over_year_change" else "Viridis"
+    color_scale = HEAT_CONTINUOUS_SCALE
     fig = px.choropleth(
         latest,
         locations="state_abbr",
@@ -496,6 +605,7 @@ def choropleth_map(latest: pd.DataFrame, metric: str) -> go.Figure:
         height=500,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color=HEAT_TEXT),
     )
     fig.update_geos(
         bgcolor="rgba(0,0,0,0)",
@@ -533,8 +643,17 @@ def time_series_chart(state_df: pd.DataFrame, metric: str) -> go.Figure:
         labels={"date": "Year", metric: METRIC_LABELS.get(metric, metric)},
         title=METRIC_LABELS.get(metric, metric),
     )
-    fig.update_traces(line=dict(width=3))
-    fig.update_layout(height=310, margin=dict(l=10, r=10, t=45, b=10), hovermode="x unified")
+    fig.update_traces(line=dict(width=3, color=HEAT_TANGERINE), marker=dict(color=HEAT_AMBER))
+    fig.update_layout(
+        height=310,
+        margin=dict(l=10, r=10, t=45, b=10),
+        hovermode="x unified",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(23,16,14,0.52)",
+        font=dict(color=HEAT_TEXT),
+    )
+    fig.update_xaxes(gridcolor="rgba(246,236,221,0.12)", zerolinecolor="rgba(246,236,221,0.2)")
+    fig.update_yaxes(gridcolor="rgba(246,236,221,0.12)", zerolinecolor="rgba(246,236,221,0.2)")
     return fig
 
 
@@ -549,7 +668,7 @@ def solar_production_comparison_chart(map_df: pd.DataFrame, selected_abbr: str) 
         y="state_abbr",
         orientation="h",
         color="color_group",
-        color_discrete_map={"Selected state": "#22c55e", "Other states": "#94a3b8"},
+        color_discrete_map={"Selected state": HEAT_AMBER, "Other states": HEAT_TOMATO},
         labels={"solar_production": "Estimated solar production (kWh)", "state_abbr": "State"},
         title="Estimated solar production across states with available data",
     )
@@ -558,7 +677,12 @@ def solar_production_comparison_chart(map_df: pd.DataFrame, selected_abbr: str) 
         margin=dict(l=10, r=10, t=45, b=10),
         showlegend=False,
         xaxis_tickformat=",",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(23,16,14,0.52)",
+        font=dict(color=HEAT_TEXT),
     )
+    fig.update_xaxes(gridcolor="rgba(246,236,221,0.12)", zerolinecolor="rgba(246,236,221,0.2)")
+    fig.update_yaxes(gridcolor="rgba(246,236,221,0.12)", zerolinecolor="rgba(246,236,221,0.2)")
     return fig
 
 

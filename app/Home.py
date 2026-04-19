@@ -3,7 +3,7 @@ from __future__ import annotations
 import streamlit as st
 
 from utils import (
-    apply_light_mode_background,
+    apply_heat_trace_theme,
     energy_solar_overlay_map,
     homepage_rankings,
     load_homepage_map_data,
@@ -12,7 +12,7 @@ from utils import (
 
 
 st.set_page_config(page_title="Heat Trace", layout="wide")
-apply_light_mode_background()
+apply_heat_trace_theme()
 
 st.title("Heat Trace")
 st.caption(

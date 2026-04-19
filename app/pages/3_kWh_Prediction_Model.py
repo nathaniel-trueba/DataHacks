@@ -11,7 +11,7 @@ APP_DIR = Path(__file__).resolve().parents[1]
 if str(APP_DIR) not in sys.path:
     sys.path.append(str(APP_DIR))
 
-from utils import apply_light_mode_background
+from utils import apply_heat_trace_theme
 
 
 LOCATION_PRESETS = {
@@ -63,7 +63,7 @@ def capacity_curve(sunlight_hours: float, avg_temperature_f: float) -> pd.DataFr
 
 
 st.set_page_config(page_title="Heat Trace | kWh Prediction Model", layout="wide")
-apply_light_mode_background()
+apply_heat_trace_theme()
 
 st.title("kWh Prediction Model")
 st.caption(
@@ -139,10 +139,20 @@ fig.add_scatter(
     x=[capacity_kw],
     y=[prediction_kwh],
     mode="markers",
-    marker=dict(size=13, color="#22c55e", line=dict(color="#111827", width=1.5)),
+    marker=dict(size=13, color="#F5A623", line=dict(color="#050403", width=1.5)),
     name="Selected capacity",
 )
-fig.update_layout(height=390, margin=dict(l=10, r=10, t=20, b=10), hovermode="x unified")
+fig.update_traces(line=dict(color="#E96225", width=3), selector=dict(type="scatter", mode="lines"))
+fig.update_layout(
+    height=390,
+    margin=dict(l=10, r=10, t=20, b=10),
+    hovermode="x unified",
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(23,16,14,0.52)",
+    font=dict(color="#F6ECDD"),
+)
+fig.update_xaxes(gridcolor="rgba(246,236,221,0.12)", zerolinecolor="rgba(246,236,221,0.2)")
+fig.update_yaxes(gridcolor="rgba(246,236,221,0.12)", zerolinecolor="rgba(246,236,221,0.2)")
 st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 with st.expander("Model inputs planned for the full version"):
