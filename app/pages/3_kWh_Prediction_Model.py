@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 APP_DIR = Path(__file__).resolve().parents[1]
@@ -15,7 +16,14 @@ FORECAST_PATH = PROJECT_ROOT / "data" / "processed" / "us_10yr_monthly_cluster_f
 if str(APP_DIR) not in sys.path:
     sys.path.append(str(APP_DIR))
 
-from utils import apply_heat_trace_theme
+from utils import (
+    HEAT_AMBER,
+    HEAT_CONTINUOUS_SCALE,
+    HEAT_MUTED,
+    HEAT_SURFACE,
+    HEAT_TEXT,
+    apply_heat_trace_theme,
+)
 
 
 LOCATION_PRESETS = {
@@ -84,6 +92,144 @@ def predict_year(
     return cluster_df.sort_values("time"), cluster
 
 
+@st.cache_data
+def build_prediction_grid(forecast_df: pd.DataFrame, kw_capacity: float, year: int) -> pd.DataFrame:
+    year_df = forecast_df[forecast_df["year"] == year].copy()
+    year_df["days_in_month"] = year_df["time"].dt.days_in_month
+    year_df["predicted_monthly_kwh"] = estimate_monthly_kwh(
+        kw_capacity=kw_capacity,
+        irradiance=year_df["irradiance"],
+        avg_temp_c=year_df["pred_tavg"],
+        days_in_month=year_df["days_in_month"],
+    )
+
+    return (
+        year_df.groupby(["cluster_id", "cluster_lat", "cluster_lon"], as_index=False)
+        .agg(
+            predicted_annual_kwh=("predicted_monthly_kwh", "sum"),
+            avg_temp_c=("pred_tavg", "mean"),
+            avg_irradiance=("irradiance", "mean"),
+        )
+        .sort_values("predicted_annual_kwh", ascending=False)
+    )
+
+
+@st.cache_data
+def build_grid_geojson(grid_df: pd.DataFrame, half_size: float = 0.55) -> dict:
+    features = []
+    for row in grid_df.itertuples(index=False):
+        lat = float(row.cluster_lat)
+        lon = float(row.cluster_lon)
+        cluster_id = str(int(row.cluster_id))
+        features.append(
+            {
+                "type": "Feature",
+                "id": cluster_id,
+                "properties": {"cluster_id": cluster_id},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [
+                        [
+                            [lon - half_size, lat - half_size],
+                            [lon + half_size, lat - half_size],
+                            [lon + half_size, lat + half_size],
+                            [lon - half_size, lat + half_size],
+                            [lon - half_size, lat - half_size],
+                        ]
+                    ],
+                },
+            }
+        )
+    return {"type": "FeatureCollection", "features": features}
+
+
+def render_prediction_grid_map(
+    grid_df: pd.DataFrame,
+    selected_cluster: pd.Series,
+    selected_location: str,
+) -> go.Figure:
+    fig = go.Figure()
+    grid_geojson = build_grid_geojson(grid_df)
+
+    fig.add_trace(
+        go.Choropleth(
+            geojson=grid_geojson,
+            locations=grid_df["cluster_id"].astype(str),
+            z=grid_df["predicted_annual_kwh"],
+            featureidkey="id",
+            colorscale=HEAT_CONTINUOUS_SCALE,
+            marker_line_color="rgba(246, 236, 221, 0.18)",
+            marker_line_width=0.35,
+            colorbar=dict(
+                title=dict(text="Predicted kWh", font=dict(color=HEAT_MUTED)),
+                tickfont=dict(color=HEAT_MUTED),
+                bgcolor="rgba(0,0,0,0)",
+                outlinecolor="rgba(246, 236, 221, 0.18)",
+            ),
+            customdata=np.stack(
+                [
+                    grid_df["cluster_lat"],
+                    grid_df["cluster_lon"],
+                    grid_df["avg_temp_c"],
+                    grid_df["avg_irradiance"],
+                ],
+                axis=-1,
+            ),
+            hovertemplate=(
+                "Forecast grid %{location}<br>"
+                "Predicted annual production: %{z:,.0f} kWh<br>"
+                "Lat/Lon: %{customdata[0]:.2f}, %{customdata[1]:.2f}<br>"
+                "Avg temp: %{customdata[2]:.1f} C<br>"
+                "Avg irradiance: %{customdata[3]:.2f}<extra></extra>"
+            ),
+        )
+    )
+
+    fig.add_trace(
+        go.Scattergeo(
+            lat=[selected_cluster["cluster_lat"]],
+            lon=[selected_cluster["cluster_lon"]],
+            mode="markers+text",
+            text=["Selected area"],
+            textposition="top center",
+            marker=dict(
+                size=13,
+                color=HEAT_AMBER,
+                line=dict(color=HEAT_TEXT, width=2),
+            ),
+            hovertemplate=(
+                f"{selected_location}<br>"
+                f"Forecast region #{int(selected_cluster['cluster_id'])}<extra></extra>"
+            ),
+            showlegend=False,
+        )
+    )
+
+    fig.update_geos(
+        scope="usa",
+        projection_type="albers usa",
+        bgcolor="rgba(0,0,0,0)",
+        showland=True,
+        landcolor=HEAT_SURFACE,
+        showlakes=False,
+        showocean=False,
+        showcoastlines=False,
+        showcountries=False,
+        showsubunits=True,
+        subunitcolor="rgba(246, 236, 221, 0.16)",
+        showframe=False,
+    )
+    fig.update_layout(
+        height=610,
+        dragmode=False,
+        margin=dict(l=0, r=0, t=12, b=0),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color=HEAT_TEXT),
+    )
+    return fig
+
+
 st.set_page_config(page_title="Heat Trace | kWh Prediction Model", layout="wide")
 apply_heat_trace_theme()
 
@@ -127,11 +273,13 @@ with input_col:
         longitude = st.number_input("Longitude", value=float(preset_lon), format="%.4f")
 
 monthly_df, cluster = predict_year(forecast_df, capacity_kw, selected_year, latitude, longitude)
+grid_df = build_prediction_grid(forecast_df, capacity_kw, selected_year)
 annual_kwh = monthly_df["predicted_monthly_kwh"].sum()
 monthly_average = annual_kwh / 12
 per_kw_output = annual_kwh / capacity_kw
 best_month = monthly_df.loc[monthly_df["predicted_monthly_kwh"].idxmax()]
 lowest_month = monthly_df.loc[monthly_df["predicted_monthly_kwh"].idxmin()]
+best_grid_cell = grid_df.iloc[0]
 
 with output_col:
     st.metric("Predicted annual production", f"{annual_kwh:,.0f} kWh")
@@ -144,6 +292,25 @@ with output_col:
         "seasonal changes in sunlight and weather."
     )
     st.caption(f"Behind the scenes, this location maps to forecast region #{int(cluster['cluster_id'])}.")
+
+st.subheader("Predicted production grid")
+st.caption(
+    "Each colored square represents one forecast region from the latitude/longitude dataset. "
+    "Warmer cells predict more annual kWh for the selected system size and year; darker cells "
+    "predict less. The marker shows the forecast region used for the selected location."
+)
+
+grid_fig = render_prediction_grid_map(grid_df, cluster, selected_location)
+st.plotly_chart(
+    grid_fig,
+    use_container_width=True,
+    config={"displayModeBar": False, "scrollZoom": False, "staticPlot": False},
+)
+
+grid_cols = st.columns(3)
+grid_cols[0].metric("Forecast grid cells", f"{len(grid_df):,}")
+grid_cols[1].metric("Highest predicted cell", f"{best_grid_cell['predicted_annual_kwh']:,.0f} kWh")
+grid_cols[2].metric("Selected cell", f"{annual_kwh:,.0f} kWh")
 
 monthly_fig = px.bar(
     monthly_df,
@@ -162,7 +329,9 @@ monthly_fig.update_layout(
 )
 monthly_fig.update_xaxes(gridcolor="rgba(246,236,221,0.12)", categoryorder="array", categoryarray=monthly_df["month_label"])
 monthly_fig.update_yaxes(gridcolor="rgba(246,236,221,0.12)", zerolinecolor="rgba(246,236,221,0.2)")
-st.plotly_chart(monthly_fig, use_container_width=True, config={"displayModeBar": False})
+
+with st.expander("Seasonal pattern for the selected location"):
+    st.plotly_chart(monthly_fig, use_container_width=True, config={"displayModeBar": False})
 
 st.info(
     f"Rule of thumb for this setup: each 1 kW of solar capacity produces about "
