@@ -153,14 +153,14 @@ def render_prediction_grid_map(
             lon=grid_df["cluster_lon"],
             mode="markers",
             marker=dict(
-                symbol="square",
-                size=15,
+                symbol="circle",
+                size=30,
                 color=grid_df["predicted_monthly_kwh"],
                 colorscale=HEAT_CONTINUOUS_SCALE,
-                opacity=0.72,
-                line=dict(color="rgba(246, 236, 221, 0.18)", width=0.45),
+                opacity=0.46,
+                line=dict(width=0),
                 colorbar=dict(
-                    title=dict(text="Predicted kWh", font=dict(color=HEAT_MUTED)),
+                    title=dict(text="Avg monthly kWh", font=dict(color=HEAT_MUTED)),
                     tickfont=dict(color=HEAT_MUTED),
                     bgcolor="rgba(0,0,0,0)",
                     outlinecolor="rgba(246, 236, 221, 0.18)",
@@ -305,9 +305,9 @@ with output_col:
 
 st.subheader("Predicted production grid")
 st.caption(
-    "Each colored square represents one forecast region from the latitude/longitude dataset. "
-    "Warmer cells predict more monthly kWh for the selected system size, month, and year; darker "
-    "cells predict less. The marker shows the forecast region used for the selected location."
+    "The soft heat layer comes from forecast regions in the latitude/longitude dataset. Warmer "
+    "areas predict more monthly kWh for the selected system size, month, and year; darker areas "
+    "predict less. The marker shows the forecast region used for the selected location."
 )
 
 grid_fig = render_prediction_grid_map(grid_df, cluster, selected_location)
