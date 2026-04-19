@@ -1,6 +1,18 @@
 __pycache__/
 *.py[cod]
 .DS_Store
+
+# Local Python environments
 .venv/
+venv/
+.python-version
+
+# Local environment files
 .env
+.env.*
+
+# Notebook/editor artifacts
+.ipynb_checkpoints/
+
+# Streamlit local secrets
 .streamlit/secrets.toml
