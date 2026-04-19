@@ -11,8 +11,6 @@ import streamlit as st
 APP_DIR = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = APP_DIR.parent
 FORECAST_PATH = PROJECT_ROOT / "data" / "processed" / "us_10yr_monthly_cluster_forecast_with_irridance.csv"
-MODEL_PATH = PROJECT_ROOT / "data" / "models" / "monthly_kwh_model.joblib"
-FEATURES_PATH = PROJECT_ROOT / "data" / "models" / "monthly_kwh_features.joblib"
 
 if str(APP_DIR) not in sys.path:
     sys.path.append(str(APP_DIR))
@@ -38,18 +36,6 @@ def load_forecast() -> pd.DataFrame:
     return df
 
 
-@st.cache_resource
-def load_model_artifacts() -> tuple[object, list[str]]:
-    import joblib
-
-    if not MODEL_PATH.exists() or not FEATURES_PATH.exists():
-        raise FileNotFoundError("Model artifacts are not available.")
-    if MODEL_PATH.stat().st_size < 1_000_000:
-        raise FileNotFoundError("Model artifact appears to be a Git LFS pointer, not the full model file.")
-
-    return joblib.load(MODEL_PATH), joblib.load(FEATURES_PATH)
-
-
 def nearest_cluster(forecast_df: pd.DataFrame, latitude: float, longitude: float) -> pd.Series:
     clusters = forecast_df[["cluster_id", "cluster_lat", "cluster_lon"]].drop_duplicates().copy()
     clusters["distance"] = np.sqrt(
@@ -72,38 +58,12 @@ def estimate_monthly_kwh(
     return kw_capacity * irradiance * days_in_month * performance_ratio * temp_loss
 
 
-def build_model_features(
-    cluster_df: pd.DataFrame,
-    kw_capacity: float,
-    month: pd.Series,
-    feature_names: list[str],
-) -> pd.DataFrame:
-    x_pred = pd.DataFrame(
-        {
-            "kilowatt_value": kw_capacity,
-            "latitude": cluster_df["cluster_lat"].values,
-            "longitude": cluster_df["cluster_lon"].values,
-            "irradiance": cluster_df["irradiance"].values,
-            "avg_temp": cluster_df["pred_tavg"].values,
-            "days_in_month": cluster_df["days_in_month"].values,
-        }
-    )
-    x_pred["kw_x_irradiance"] = x_pred["kilowatt_value"] * x_pred["irradiance"]
-    x_pred["temp_above_25"] = np.maximum(x_pred["avg_temp"] - 25, 0)
-    x_pred["month_sin"] = np.sin(2 * np.pi * month.values / 12)
-    x_pred["month_cos"] = np.cos(2 * np.pi * month.values / 12)
-    return x_pred[feature_names]
-
-
 def predict_year(
     forecast_df: pd.DataFrame,
     kw_capacity: float,
     year: int,
     latitude: float,
     longitude: float,
-    method: str,
-    model: object | None = None,
-    feature_names: list[str] | None = None,
 ) -> tuple[pd.DataFrame, pd.Series]:
     cluster = nearest_cluster(forecast_df, latitude, longitude)
     cluster_df = forecast_df[
@@ -114,16 +74,12 @@ def predict_year(
         raise ValueError(f"No forecast rows found for {year}.")
 
     cluster_df["days_in_month"] = cluster_df["time"].dt.days_in_month
-    if method == "ML model" and model is not None and feature_names is not None:
-        x_pred = build_model_features(cluster_df, kw_capacity, cluster_df["month"], feature_names)
-        cluster_df["predicted_monthly_kwh"] = model.predict(x_pred)
-    else:
-        cluster_df["predicted_monthly_kwh"] = estimate_monthly_kwh(
-            kw_capacity=kw_capacity,
-            irradiance=cluster_df["irradiance"],
-            avg_temp_c=cluster_df["pred_tavg"],
-            days_in_month=cluster_df["days_in_month"],
-        )
+    cluster_df["predicted_monthly_kwh"] = estimate_monthly_kwh(
+        kw_capacity=kw_capacity,
+        irradiance=cluster_df["irradiance"],
+        avg_temp_c=cluster_df["pred_tavg"],
+        days_in_month=cluster_df["days_in_month"],
+    )
     cluster_df["month_label"] = cluster_df["time"].dt.strftime("%b")
     return cluster_df.sort_values("time"), cluster
 
@@ -133,23 +89,11 @@ def capacity_curve(
     selected_year: int,
     latitude: float,
     longitude: float,
-    method: str,
-    model: object | None,
-    feature_names: list[str] | None,
 ) -> pd.DataFrame:
     capacities = [round(value * 0.5, 1) for value in range(2, 81)]
     rows = []
     for capacity in capacities:
-        predicted, _ = predict_year(
-            forecast_df,
-            capacity,
-            selected_year,
-            latitude,
-            longitude,
-            method,
-            model,
-            feature_names,
-        )
+        predicted, _ = predict_year(forecast_df, capacity, selected_year, latitude, longitude)
         rows.append(
             {
                 "System capacity (kW)": capacity,
@@ -170,27 +114,11 @@ st.caption(
 
 forecast_df = load_forecast()
 available_years = sorted(forecast_df["year"].unique())
-model = None
-feature_names = None
-model_ready = False
-model_message = ""
-
-try:
-    model, feature_names = load_model_artifacts()
-    model_ready = True
-except Exception as exc:
-    model_message = str(exc)
 
 summary_cols = st.columns(3)
 summary_cols[0].metric("Prediction target", "Annual kWh")
 summary_cols[1].metric("Forecast clusters", f"{forecast_df['cluster_id'].nunique():,}")
-summary_cols[2].metric("Model status", "ML model" if model_ready else "Formula fallback")
-
-if not model_ready:
-    st.info(
-        "The formula predictor is active because the ML artifact could not be loaded. "
-        f"Details: {model_message}"
-    )
+summary_cols[2].metric("Forecast years", f"{min(available_years)}-{max(available_years)}")
 
 st.subheader("Solar production playground")
 
@@ -208,26 +136,12 @@ with input_col:
         step=0.5,
     )
     selected_year = st.selectbox("Prediction year", available_years, index=0)
-    prediction_method = st.radio(
-        "Prediction method",
-        ["ML model", "Formula predictor"] if model_ready else ["Formula predictor"],
-        horizontal=True,
-    )
 
     with st.expander("Location inputs"):
         latitude = st.number_input("Latitude", value=float(preset_lat), format="%.4f")
         longitude = st.number_input("Longitude", value=float(preset_lon), format="%.4f")
 
-monthly_df, cluster = predict_year(
-    forecast_df,
-    capacity_kw,
-    selected_year,
-    latitude,
-    longitude,
-    prediction_method,
-    model,
-    feature_names,
-)
+monthly_df, cluster = predict_year(forecast_df, capacity_kw, selected_year, latitude, longitude)
 annual_kwh = monthly_df["predicted_monthly_kwh"].sum()
 monthly_average = annual_kwh / 12
 per_kw_output = annual_kwh / capacity_kw
@@ -241,7 +155,7 @@ with output_col:
         f"The closest forecast cluster is #{int(cluster['cluster_id'])}, centered near "
         f"{cluster['cluster_lat']:.2f}, {cluster['cluster_lon']:.2f}. "
         f"The strongest predicted month is {best_month['month_label']} at "
-        f"{best_month['predicted_monthly_kwh']:,.0f} kWh using the {prediction_method.lower()}."
+        f"{best_month['predicted_monthly_kwh']:,.0f} kWh."
     )
 
 monthly_fig = px.bar(
@@ -263,15 +177,7 @@ monthly_fig.update_xaxes(gridcolor="rgba(246,236,221,0.12)", categoryorder="arra
 monthly_fig.update_yaxes(gridcolor="rgba(246,236,221,0.12)", zerolinecolor="rgba(246,236,221,0.2)")
 st.plotly_chart(monthly_fig, use_container_width=True, config={"displayModeBar": False})
 
-curve_df = capacity_curve(
-    forecast_df,
-    selected_year,
-    latitude,
-    longitude,
-    prediction_method,
-    model,
-    feature_names,
-)
+curve_df = capacity_curve(forecast_df, selected_year, latitude, longitude)
 curve_fig = px.line(
     curve_df,
     x="System capacity (kW)",
