@@ -15,17 +15,9 @@ st.set_page_config(page_title="Heat Trace | Insights", layout="wide")
 st.title("Insights")
 st.caption("Solar permit patterns reveal two very different adoption stories.")
 
-combined_chart_path = APP_DIR / "assets" / "solar_permit_individual_analysis.png"
 permit_count_chart_path = APP_DIR / "assets" / "top_cities_by_permit_count.png"
 avg_system_chart_path = APP_DIR / "assets" / "top_cities_by_avg_system_size_per_permit.png"
 adoption_time_chart_path = APP_DIR / "assets" / "solar_permit_adoption_over_time.png"
-
-st.subheader("Two types of solar buyers, side by side")
-st.write(
-    "The charts below compare cities by permit volume (left) and average system size (right). "
-    "The contrast tells two completely different stories about who is actually going solar."
-)
-st.image(combined_chart_path, use_container_width=True)
 
 st.subheader("Tiny towns, huge systems. Big cities, everyday rooftops.")
 st.write(
