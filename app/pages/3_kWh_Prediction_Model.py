@@ -35,6 +35,21 @@ LOCATION_PRESETS = {
     "Newark, NJ": (40.74, -74.17),
 }
 
+MONTH_OPTIONS = {
+    "January": 1,
+    "February": 2,
+    "March": 3,
+    "April": 4,
+    "May": 5,
+    "June": 6,
+    "July": 7,
+    "August": 8,
+    "September": 9,
+    "October": 10,
+    "November": 11,
+    "December": 12,
+}
+
 
 @st.cache_data
 def load_forecast() -> pd.DataFrame:
@@ -66,28 +81,15 @@ def nearest_cluster(forecast_df: pd.DataFrame, latitude: float, longitude: float
 
 
 @st.cache_data
-def build_prediction_grid(_predictor, kw_capacity: float, year: int) -> pd.DataFrame:
-    month_tables = []
-    for month in range(1, 13):
-        month_df = _predictor.predict_table(
-            kw_capacity=kw_capacity,
-            month=month,
-            year=year,
-        ).copy()
-        month_df["month"] = month
-        month_tables.append(month_df)
-
-    year_df = pd.concat(month_tables, ignore_index=True)
-
-    return (
-        year_df.groupby(["cluster_id", "cluster_lat", "cluster_lon"], as_index=False)
-        .agg(
-            predicted_annual_kwh=("predicted_monthly_kwh", "sum"),
-            avg_temp_c=("pred_tavg", "mean"),
-            avg_irradiance=("irradiance", "mean"),
-        )
-        .sort_values("predicted_annual_kwh", ascending=False)
-    )
+def build_prediction_grid(_predictor, kw_capacity: float, month: int, year: int) -> pd.DataFrame:
+    grid_df = _predictor.predict_table(
+        kw_capacity=kw_capacity,
+        month=month,
+        year=year,
+    ).copy()
+    grid_df["month"] = month
+    grid_df = grid_df.rename(columns={"pred_tavg": "avg_temp_c", "irradiance": "avg_irradiance"})
+    return grid_df.sort_values("predicted_monthly_kwh", ascending=False)
 
 
 def build_selected_monthly_table(
@@ -153,7 +155,7 @@ def render_prediction_grid_map(
             marker=dict(
                 symbol="square",
                 size=15,
-                color=grid_df["predicted_annual_kwh"],
+                color=grid_df["predicted_monthly_kwh"],
                 colorscale=HEAT_CONTINUOUS_SCALE,
                 opacity=0.72,
                 line=dict(color="rgba(246, 236, 221, 0.18)", width=0.45),
@@ -170,7 +172,7 @@ def render_prediction_grid_map(
             ),
             hovertemplate=(
                 "Forecast grid %{customdata[0]}<br>"
-                "Predicted annual production: %{marker.color:,.0f} kWh<br>"
+                "Predicted avg monthly production: %{marker.color:,.0f} kWh<br>"
                 "Lat/Lon: %{lat:.2f}, %{lon:.2f}<br>"
                 "Avg temp: %{customdata[1]:.1f} C<br>"
                 "Avg irradiance: %{customdata[2]:.2f}<extra></extra>"
@@ -230,11 +232,11 @@ apply_heat_trace_theme()
 
 st.title("kWh Prediction Model")
 st.caption(
-    "This page uses the formula-backed predictor from the model repo to estimate annual solar "
-    "production in kWh from system capacity, forecast temperature, location, and irradiance. "
-    "In plain terms: choose how large the solar system is, pick a place and year, and Heat Trace "
-    "estimates how much electricity that system could generate over the year. kW describes the size "
-    "of the solar system; kWh describes the amount of electricity it produces."
+    "This page uses the predictor from the model repo to estimate monthly solar production in kWh "
+    "from system capacity, forecast temperature, location, and irradiance. In plain terms: choose "
+    "how large the solar system is, pick a month and place, and Heat Trace estimates how much "
+    "electricity that system could generate during that month. kW describes the size of the solar "
+    "system; kWh describes the amount of electricity it produces."
 )
 
 forecast_df = load_forecast()
@@ -243,7 +245,7 @@ available_years = sorted(forecast_df["year"].unique())
 
 summary_cols = st.columns(3)
 summary_cols[0].metric("Input", "System size")
-summary_cols[1].metric("Output", "Annual kWh")
+summary_cols[1].metric("Output", "Avg monthly kWh")
 summary_cols[2].metric("Forecast years", f"{min(available_years)}-{max(available_years)}")
 st.caption(f"Current prediction engine: {predictor_label}.")
 
@@ -252,7 +254,7 @@ st.subheader("Try a solar system size")
 input_col, output_col = st.columns([1, 1])
 
 with input_col:
-    st.write("Adjust the values below to see how the yearly production estimate changes.")
+    st.write("Adjust the values below to see how the monthly production estimate changes.")
     selected_location = st.selectbox("Location preset", list(LOCATION_PRESETS.keys()))
     preset_lat, preset_lon = LOCATION_PRESETS[selected_location]
 
@@ -264,12 +266,14 @@ with input_col:
         step=0.5,
     )
     selected_year = st.selectbox("Prediction year", available_years, index=0)
+    selected_month_name = st.selectbox("Prediction month", list(MONTH_OPTIONS.keys()), index=6)
+    selected_month = MONTH_OPTIONS[selected_month_name]
 
     with st.expander("Fine tune location"):
         latitude = st.number_input("Latitude", value=float(preset_lat), format="%.4f")
         longitude = st.number_input("Longitude", value=float(preset_lon), format="%.4f")
 
-grid_df = build_prediction_grid(predictor, capacity_kw, selected_year)
+grid_df = build_prediction_grid(predictor, capacity_kw, selected_month, selected_year)
 monthly_df, cluster = build_selected_monthly_table(
     grid_df,
     predictor,
@@ -278,30 +282,32 @@ monthly_df, cluster = build_selected_monthly_table(
     latitude,
     longitude,
 )
-annual_kwh = monthly_df["predicted_monthly_kwh"].sum()
-monthly_average = annual_kwh / 12
-per_kw_output = annual_kwh / capacity_kw
+selected_cell = grid_df[grid_df["cluster_id"] == cluster["cluster_id"]].iloc[0]
+monthly_kwh = selected_cell["predicted_monthly_kwh"]
+days_in_month = pd.Timestamp(year=selected_year, month=selected_month, day=1).days_in_month
+daily_average = monthly_kwh / days_in_month
+per_kw_output = monthly_kwh / capacity_kw
 best_month = monthly_df.loc[monthly_df["predicted_monthly_kwh"].idxmax()]
 lowest_month = monthly_df.loc[monthly_df["predicted_monthly_kwh"].idxmin()]
 best_grid_cell = grid_df.iloc[0]
 
 with output_col:
-    st.metric("Predicted annual production", f"{annual_kwh:,.0f} kWh")
-    st.metric("Average monthly production", f"{monthly_average:,.0f} kWh")
-    st.metric("Best month", f"{best_month['month_label']} ({best_month['predicted_monthly_kwh']:,.0f} kWh)")
+    st.metric("Predicted avg monthly production", f"{monthly_kwh:,.0f} kWh")
+    st.metric("Average daily production", f"{daily_average:,.0f} kWh")
+    st.metric("Forecast region", f"#{int(cluster['cluster_id'])}")
     st.write(
         f"A {capacity_kw:g} kW system near {selected_location} is estimated to produce "
-        f"{annual_kwh:,.0f} kWh in {selected_year}. Production is strongest in "
-        f"{best_month['month_label']} and weakest in {lowest_month['month_label']}, which reflects "
-        "seasonal changes in sunlight and weather."
+        f"{monthly_kwh:,.0f} kWh in {selected_month_name} {selected_year}. Across the full year "
+        f"for this same location, production is strongest in {best_month['month_label']} and "
+        f"weakest in {lowest_month['month_label']}, reflecting seasonal changes in sunlight and weather."
     )
     st.caption(f"Behind the scenes, this location maps to forecast region #{int(cluster['cluster_id'])}.")
 
 st.subheader("Predicted production grid")
 st.caption(
     "Each colored square represents one forecast region from the latitude/longitude dataset. "
-    "Warmer cells predict more annual kWh for the selected system size and year; darker cells "
-    "predict less. The marker shows the forecast region used for the selected location."
+    "Warmer cells predict more monthly kWh for the selected system size, month, and year; darker "
+    "cells predict less. The marker shows the forecast region used for the selected location."
 )
 
 grid_fig = render_prediction_grid_map(grid_df, cluster, selected_location)
@@ -313,8 +319,8 @@ st.plotly_chart(
 
 grid_cols = st.columns(3)
 grid_cols[0].metric("Forecast grid cells", f"{len(grid_df):,}")
-grid_cols[1].metric("Highest predicted cell", f"{best_grid_cell['predicted_annual_kwh']:,.0f} kWh")
-grid_cols[2].metric("Selected cell", f"{annual_kwh:,.0f} kWh")
+grid_cols[1].metric("Highest predicted cell", f"{best_grid_cell['predicted_monthly_kwh']:,.0f} kWh")
+grid_cols[2].metric("Selected cell", f"{monthly_kwh:,.0f} kWh")
 
 monthly_fig = px.bar(
     monthly_df,
@@ -339,5 +345,5 @@ with st.expander("Seasonal pattern for the selected location"):
 
 st.info(
     f"Rule of thumb for this setup: each 1 kW of solar capacity produces about "
-    f"{per_kw_output:,.0f} kWh per year in this forecast location."
+    f"{per_kw_output:,.0f} kWh in {selected_month_name} at this forecast location."
 )
