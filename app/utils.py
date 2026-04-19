@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 from typing import Iterable
@@ -13,6 +14,7 @@ import plotly.graph_objects as go
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = PROJECT_ROOT / "data" / "processed" / "clean_energy_data.csv"
 HOME_MAP_DATA_PATH = PROJECT_ROOT / "data" / "processed" / "homepage_mapdata.csv"
+US_STATES_GEOJSON_PATH = PROJECT_ROOT / "app" / "assets" / "us-states.json"
 BTU_PER_KWH = 3412.142
 
 if str(PROJECT_ROOT) not in sys.path:
@@ -135,6 +137,59 @@ US_STATE_ABBRS = [
     "WY",
 ]
 
+STATE_CENTROIDS = {
+    "AL": (32.8067, -86.7911),
+    "AK": (61.3707, -152.4044),
+    "AZ": (33.7298, -111.4312),
+    "AR": (34.9697, -92.3731),
+    "CA": (36.1162, -119.6816),
+    "CO": (39.0598, -105.3111),
+    "CT": (41.5978, -72.7554),
+    "DE": (39.3185, -75.5071),
+    "FL": (27.7663, -81.6868),
+    "GA": (33.0406, -83.6431),
+    "HI": (21.0943, -157.4983),
+    "ID": (44.2405, -114.4788),
+    "IL": (40.3495, -88.9861),
+    "IN": (39.8494, -86.2583),
+    "IA": (42.0115, -93.2105),
+    "KS": (38.5266, -96.7265),
+    "KY": (37.6681, -84.6701),
+    "LA": (31.1695, -91.8678),
+    "ME": (44.6939, -69.3819),
+    "MD": (39.0639, -76.8021),
+    "MA": (42.2302, -71.5301),
+    "MI": (43.3266, -84.5361),
+    "MN": (45.6945, -93.9002),
+    "MS": (32.7416, -89.6787),
+    "MO": (38.4561, -92.2884),
+    "MT": (46.9219, -110.4544),
+    "NE": (41.1254, -98.2681),
+    "NV": (38.3135, -117.0554),
+    "NH": (43.4525, -71.5639),
+    "NJ": (40.2989, -74.5210),
+    "NM": (34.8405, -106.2485),
+    "NY": (42.1657, -74.9481),
+    "NC": (35.6301, -79.8064),
+    "ND": (47.5289, -99.7840),
+    "OH": (40.3888, -82.7649),
+    "OK": (35.5653, -96.9289),
+    "OR": (44.5720, -122.0709),
+    "PA": (40.5908, -77.2098),
+    "RI": (41.6809, -71.5118),
+    "SC": (33.8569, -80.9450),
+    "SD": (44.2998, -99.4388),
+    "TN": (35.7478, -86.6923),
+    "TX": (31.0545, -97.5635),
+    "UT": (40.1500, -111.8624),
+    "VT": (44.0459, -72.7107),
+    "VA": (37.7693, -78.1700),
+    "WA": (47.4009, -121.4905),
+    "WV": (38.4912, -80.9545),
+    "WI": (44.2685, -89.6165),
+    "WY": (42.7560, -107.3025),
+}
+
 
 def apply_light_mode_background() -> None:
     """Use a warmer page background in light mode while preserving dark mode."""
@@ -198,6 +253,13 @@ def ensure_energy_data() -> Path:
     if not DATA_PATH.exists():
         raise FileNotFoundError(f"Expected energy dataset at {DATA_PATH}")
     return DATA_PATH
+
+
+def load_us_states_geojson() -> dict:
+    if not US_STATES_GEOJSON_PATH.exists():
+        raise FileNotFoundError(f"Expected U.S. states GeoJSON at {US_STATES_GEOJSON_PATH}")
+    with US_STATES_GEOJSON_PATH.open() as file:
+        return json.load(file)
 
 
 def load_state_timeseries() -> pd.DataFrame:
@@ -304,6 +366,7 @@ def render_homepage_map_cards(map_df: pd.DataFrame) -> None:
 def energy_solar_overlay_map(map_df: pd.DataFrame) -> go.Figure:
     energy_df = map_df.dropna(subset=["energy_consumption"]).copy()
     solar_df = map_df.dropna(subset=["solar_production"]).copy()
+    us_states_geojson = load_us_states_geojson()
     energy_df["solar_display"] = energy_df["solar_production"].map(
         lambda value: f"{value:,.0f}" if pd.notna(value) else "Not available"
     )
@@ -318,7 +381,8 @@ def energy_solar_overlay_map(map_df: pd.DataFrame) -> go.Figure:
     fig.add_trace(
         go.Choropleth(
             locations=missing_states,
-            locationmode="USA-states",
+            geojson=us_states_geojson,
+            featureidkey="id",
             z=[1] * len(missing_states),
             colorscale=[[0, "#9ca3af"], [1, "#9ca3af"]],
             showscale=False,
@@ -332,7 +396,8 @@ def energy_solar_overlay_map(map_df: pd.DataFrame) -> go.Figure:
     fig.add_trace(
         go.Choropleth(
             locations=energy_df["state_abbr"],
-            locationmode="USA-states",
+            geojson=us_states_geojson,
+            featureidkey="id",
             z=energy_df["energy_consumption"],
             colorscale="YlOrRd",
             marker_line_color="rgba(255, 255, 255, 0.85)",
@@ -349,12 +414,15 @@ def energy_solar_overlay_map(map_df: pd.DataFrame) -> go.Figure:
     )
 
     if not solar_df.empty:
+        solar_df["lat"] = solar_df["state_abbr"].map(lambda abbr: STATE_CENTROIDS[abbr][0])
+        solar_df["lon"] = solar_df["state_abbr"].map(lambda abbr: STATE_CENTROIDS[abbr][1])
         max_solar = solar_df["solar_production"].max()
         bubble_sizes = 10 + 42 * np.sqrt(solar_df["solar_production"] / max_solar)
         fig.add_trace(
             go.Scattergeo(
-                locations=solar_df["state_abbr"],
-                locationmode="USA-states",
+                lat=solar_df["lat"],
+                lon=solar_df["lon"],
+                text=solar_df["state_abbr"],
                 mode="markers",
                 marker=dict(
                     size=bubble_sizes,
@@ -363,7 +431,7 @@ def energy_solar_overlay_map(map_df: pd.DataFrame) -> go.Figure:
                 ),
                 customdata=np.stack([solar_df["solar_production"], solar_df["energy_display"]], axis=-1),
                 hovertemplate=(
-                    "%{location}<br>"
+                    "%{text}<br>"
                     "Solar production: %{customdata[0]:,.0f}<br>"
                     "Energy consumption: %{customdata[1]}<extra></extra>"
                 ),
@@ -381,6 +449,7 @@ def energy_solar_overlay_map(map_df: pd.DataFrame) -> go.Figure:
     )
     fig.update_geos(
         scope="usa",
+        projection_type="albers usa",
         bgcolor="rgba(0,0,0,0)",
         showland=False,
         showocean=False,
