@@ -3,11 +3,15 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 
 APP_DIR = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = APP_DIR.parent
+FORECAST_PATH = PROJECT_ROOT / "data" / "processed" / "us_10yr_monthly_cluster_forecast_with_irridance.csv"
+
 if str(APP_DIR) not in sys.path:
     sys.path.append(str(APP_DIR))
 
@@ -15,51 +19,88 @@ from utils import apply_heat_trace_theme
 
 
 LOCATION_PRESETS = {
-    "San Diego, CA": {
-        "latitude": 32.72,
-        "longitude": -117.16,
-        "avg_temperature_f": 65.0,
-        "sunlight_hours": 5.7,
-    },
-    "Phoenix, AZ": {
-        "latitude": 33.45,
-        "longitude": -112.07,
-        "avg_temperature_f": 75.0,
-        "sunlight_hours": 6.6,
-    },
-    "Austin, TX": {
-        "latitude": 30.27,
-        "longitude": -97.74,
-        "avg_temperature_f": 69.0,
-        "sunlight_hours": 5.3,
-    },
-    "Portland, OR": {
-        "latitude": 45.52,
-        "longitude": -122.68,
-        "avg_temperature_f": 54.0,
-        "sunlight_hours": 3.8,
-    },
+    "San Diego, CA": (32.72, -117.16),
+    "Phoenix, AZ": (33.45, -112.07),
+    "Austin, TX": (30.27, -97.74),
+    "Portland, OR": (45.52, -122.68),
+    "Newark, NJ": (40.74, -74.17),
 }
 
 
-def baseline_kwh_prediction(capacity_kw: float, sunlight_hours: float, avg_temperature_f: float) -> float:
-    """Temporary solar production estimate until the trained model is connected."""
-    performance_ratio = 0.82
-    temp_penalty = max(0.88, 1 - max(avg_temperature_f - 77, 0) * 0.003)
-    return capacity_kw * sunlight_hours * 365 * performance_ratio * temp_penalty
+@st.cache_data
+def load_forecast() -> pd.DataFrame:
+    df = pd.read_csv(FORECAST_PATH)
+    df["time"] = pd.to_datetime(df["time"])
+    df["year"] = df["time"].dt.year
+    df["month"] = df["time"].dt.month
+    return df
 
 
-def capacity_curve(sunlight_hours: float, avg_temperature_f: float) -> pd.DataFrame:
-    capacities = [round(value * 0.5, 1) for value in range(2, 81)]
-    return pd.DataFrame(
-        {
-            "System capacity (kW)": capacities,
-            "Predicted annual production (kWh)": [
-                baseline_kwh_prediction(capacity, sunlight_hours, avg_temperature_f)
-                for capacity in capacities
-            ],
-        }
+def nearest_cluster(forecast_df: pd.DataFrame, latitude: float, longitude: float) -> pd.Series:
+    clusters = forecast_df[["cluster_id", "cluster_lat", "cluster_lon"]].drop_duplicates().copy()
+    clusters["distance"] = np.sqrt(
+        (clusters["cluster_lat"] - latitude) ** 2 + (clusters["cluster_lon"] - longitude) ** 2
     )
+    return clusters.loc[clusters["distance"].idxmin()]
+
+
+def estimate_monthly_kwh(
+    kw_capacity: float,
+    irradiance: pd.Series,
+    avg_temp_c: pd.Series,
+    days_in_month: pd.Series,
+    performance_ratio: float = 0.75,
+    temp_coeff: float = 0.004,
+    min_temp_loss: float = 0.80,
+) -> pd.Series:
+    temp_loss = 1 - np.maximum(avg_temp_c - 25, 0) * temp_coeff
+    temp_loss = np.maximum(temp_loss, min_temp_loss)
+    return kw_capacity * irradiance * days_in_month * performance_ratio * temp_loss
+
+
+def predict_year(
+    forecast_df: pd.DataFrame,
+    kw_capacity: float,
+    year: int,
+    latitude: float,
+    longitude: float,
+) -> tuple[pd.DataFrame, pd.Series]:
+    cluster = nearest_cluster(forecast_df, latitude, longitude)
+    cluster_df = forecast_df[
+        (forecast_df["cluster_id"] == cluster["cluster_id"]) & (forecast_df["year"] == year)
+    ].copy()
+
+    if cluster_df.empty:
+        raise ValueError(f"No forecast rows found for {year}.")
+
+    cluster_df["days_in_month"] = cluster_df["time"].dt.days_in_month
+    cluster_df["predicted_monthly_kwh"] = estimate_monthly_kwh(
+        kw_capacity=kw_capacity,
+        irradiance=cluster_df["irradiance"],
+        avg_temp_c=cluster_df["pred_tavg"],
+        days_in_month=cluster_df["days_in_month"],
+    )
+    cluster_df["month_label"] = cluster_df["time"].dt.strftime("%b")
+    return cluster_df.sort_values("time"), cluster
+
+
+def capacity_curve(
+    forecast_df: pd.DataFrame,
+    selected_year: int,
+    latitude: float,
+    longitude: float,
+) -> pd.DataFrame:
+    capacities = [round(value * 0.5, 1) for value in range(2, 81)]
+    rows = []
+    for capacity in capacities:
+        predicted, _ = predict_year(forecast_df, capacity, selected_year, latitude, longitude)
+        rows.append(
+            {
+                "System capacity (kW)": capacity,
+                "Predicted annual production (kWh)": predicted["predicted_monthly_kwh"].sum(),
+            }
+        )
+    return pd.DataFrame(rows)
 
 
 st.set_page_config(page_title="Heat Trace | kWh Prediction Model", layout="wide")
@@ -67,19 +108,17 @@ apply_heat_trace_theme()
 
 st.title("kWh Prediction Model")
 st.caption(
-    "Interactive template for a future Heat Trace model that predicts annual solar production in kWh "
-    "from system capacity, weather, location, and sunlight."
+    "This page uses the formula-backed predictor from the model repo to estimate annual solar "
+    "production in kWh from system capacity, forecast temperature, location, and irradiance."
 )
 
-st.info(
-    "This page currently uses a transparent baseline estimate so the demo is interactive. "
-    "Later, this calculation can be replaced with the trained machine learning model."
-)
+forecast_df = load_forecast()
+available_years = sorted(forecast_df["year"].unique())
 
 summary_cols = st.columns(3)
 summary_cols[0].metric("Prediction target", "Annual kWh")
-summary_cols[1].metric("Primary input", "kW capacity")
-summary_cols[2].metric("Model status", "Template")
+summary_cols[1].metric("Forecast clusters", f"{forecast_df['cluster_id'].nunique():,}")
+summary_cols[2].metric("Forecast years", f"{min(available_years)}-{max(available_years)}")
 
 st.subheader("Solar production playground")
 
@@ -87,7 +126,7 @@ input_col, output_col = st.columns([1, 1])
 
 with input_col:
     selected_location = st.selectbox("Location preset", list(LOCATION_PRESETS.keys()))
-    preset = LOCATION_PRESETS[selected_location]
+    preset_lat, preset_lon = LOCATION_PRESETS[selected_location]
 
     capacity_kw = st.slider(
         "System capacity (kW)",
@@ -96,68 +135,93 @@ with input_col:
         value=8.0,
         step=0.5,
     )
+    selected_year = st.selectbox("Prediction year", available_years, index=0)
 
-    with st.expander("Weather and sunlight assumptions"):
-        latitude = st.number_input("Latitude", value=preset["latitude"], format="%.4f")
-        longitude = st.number_input("Longitude", value=preset["longitude"], format="%.4f")
-        avg_temperature_f = st.slider(
-            "Average temperature (F)",
-            min_value=35.0,
-            max_value=95.0,
-            value=float(preset["avg_temperature_f"]),
-            step=1.0,
-        )
-        sunlight_hours = st.slider(
-            "Average daily sunlight / irradiance proxy (hours)",
-            min_value=2.0,
-            max_value=8.0,
-            value=float(preset["sunlight_hours"]),
-            step=0.1,
-        )
+    with st.expander("Location inputs"):
+        latitude = st.number_input("Latitude", value=float(preset_lat), format="%.4f")
+        longitude = st.number_input("Longitude", value=float(preset_lon), format="%.4f")
 
-prediction_kwh = baseline_kwh_prediction(capacity_kw, sunlight_hours, avg_temperature_f)
-monthly_average = prediction_kwh / 12
-per_kw_output = prediction_kwh / capacity_kw
+monthly_df, cluster = predict_year(forecast_df, capacity_kw, selected_year, latitude, longitude)
+annual_kwh = monthly_df["predicted_monthly_kwh"].sum()
+monthly_average = annual_kwh / 12
+per_kw_output = annual_kwh / capacity_kw
+best_month = monthly_df.loc[monthly_df["predicted_monthly_kwh"].idxmax()]
 
 with output_col:
-    st.metric("Predicted annual production", f"{prediction_kwh:,.0f} kWh")
+    st.metric("Predicted annual production", f"{annual_kwh:,.0f} kWh")
     st.metric("Average monthly production", f"{monthly_average:,.0f} kWh")
     st.metric("Annual output per kW", f"{per_kw_output:,.0f} kWh/kW")
     st.write(
-        f"For a {capacity_kw:g} kW system near {selected_location}, the template estimate is "
-        f"{prediction_kwh:,.0f} kWh per year using {sunlight_hours:.1f} average daily sunlight hours."
+        f"The closest forecast cluster is #{int(cluster['cluster_id'])}, centered near "
+        f"{cluster['cluster_lat']:.2f}, {cluster['cluster_lon']:.2f}. "
+        f"The strongest predicted month is {best_month['month_label']} at "
+        f"{best_month['predicted_monthly_kwh']:,.0f} kWh."
     )
 
-curve_df = capacity_curve(sunlight_hours, avg_temperature_f)
-fig = px.line(
+monthly_fig = px.bar(
+    monthly_df,
+    x="month_label",
+    y="predicted_monthly_kwh",
+    labels={"month_label": "Month", "predicted_monthly_kwh": "Predicted monthly production (kWh)"},
+    title=f"Monthly production forecast for {selected_year}",
+)
+monthly_fig.update_traces(marker_color="#F57C30", marker_line_color="#F5A623", marker_line_width=1)
+monthly_fig.update_layout(
+    height=360,
+    margin=dict(l=10, r=10, t=45, b=10),
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(23,16,14,0.52)",
+    font=dict(color="#F6ECDD"),
+)
+monthly_fig.update_xaxes(gridcolor="rgba(246,236,221,0.12)", categoryorder="array", categoryarray=monthly_df["month_label"])
+monthly_fig.update_yaxes(gridcolor="rgba(246,236,221,0.12)", zerolinecolor="rgba(246,236,221,0.2)")
+st.plotly_chart(monthly_fig, use_container_width=True, config={"displayModeBar": False})
+
+curve_df = capacity_curve(forecast_df, selected_year, latitude, longitude)
+curve_fig = px.line(
     curve_df,
     x="System capacity (kW)",
     y="Predicted annual production (kWh)",
-    markers=False,
 )
-fig.add_scatter(
+curve_fig.add_scatter(
     x=[capacity_kw],
-    y=[prediction_kwh],
+    y=[annual_kwh],
     mode="markers",
     marker=dict(size=13, color="#F5A623", line=dict(color="#050403", width=1.5)),
     name="Selected capacity",
 )
-fig.update_traces(line=dict(color="#E96225", width=3), selector=dict(type="scatter", mode="lines"))
-fig.update_layout(
+curve_fig.update_traces(line=dict(color="#E96225", width=3), selector=dict(type="scatter", mode="lines"))
+curve_fig.update_layout(
     height=390,
-    margin=dict(l=10, r=10, t=20, b=10),
+    margin=dict(l=10, r=10, t=25, b=10),
     hovermode="x unified",
     paper_bgcolor="rgba(0,0,0,0)",
     plot_bgcolor="rgba(23,16,14,0.52)",
     font=dict(color="#F6ECDD"),
 )
-fig.update_xaxes(gridcolor="rgba(246,236,221,0.12)", zerolinecolor="rgba(246,236,221,0.2)")
-fig.update_yaxes(gridcolor="rgba(246,236,221,0.12)", zerolinecolor="rgba(246,236,221,0.2)")
-st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+curve_fig.update_xaxes(gridcolor="rgba(246,236,221,0.12)", zerolinecolor="rgba(246,236,221,0.2)")
+curve_fig.update_yaxes(gridcolor="rgba(246,236,221,0.12)", zerolinecolor="rgba(246,236,221,0.2)")
+st.plotly_chart(curve_fig, use_container_width=True, config={"displayModeBar": False})
 
-with st.expander("Model inputs planned for the full version"):
-    st.write(
-        "The production model is expected to use kW capacity, latitude, longitude, weather-derived "
-        "average temperature, and sunlight or irradiance features. The user-facing workflow will keep "
-        "capacity easy to adjust while location and environmental features can be filled from data APIs."
+with st.expander("Forecast details for the selected cluster"):
+    st.dataframe(
+        monthly_df[
+            ["month_label", "pred_tavg", "irradiance", "days_in_month", "predicted_monthly_kwh"]
+        ].rename(
+            columns={
+                "month_label": "Month",
+                "pred_tavg": "Avg temp (C)",
+                "irradiance": "Irradiance",
+                "days_in_month": "Days",
+                "predicted_monthly_kwh": "Predicted kWh",
+            }
+        ).style.format(
+            {
+                "Avg temp (C)": "{:.1f}",
+                "Irradiance": "{:.2f}",
+                "Predicted kWh": "{:,.0f}",
+            }
+        ),
+        use_container_width=True,
+        hide_index=True,
     )
