@@ -16,7 +16,13 @@ st.set_page_config(page_title="Heat Trace | Insights", layout="wide")
 apply_light_mode_background()
 
 st.title("Insights")
-st.caption("Solar permit patterns reveal two very different adoption stories.")
+st.caption(
+    "Solar permit patterns point to two different adoption stories: urban areas with thousands of "
+    "smaller homeowner installs, and rural areas where a few very large systems can dominate capacity. "
+    "The ZenPower solar data covers only 21 states because it comes from companies operating in specific "
+    "regions, with California and Texas dominating permit counts; a fuller national dataset would test "
+    "this gap across more states, but the pattern is already clear in this subset."
+)
 
 permit_count_chart_path = APP_DIR / "assets" / "top_cities_by_permit_count.png"
 avg_system_chart_path = APP_DIR / "assets" / "top_cities_by_avg_system_size_per_permit.png"
