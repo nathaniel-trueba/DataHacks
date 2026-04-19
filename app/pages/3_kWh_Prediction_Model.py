@@ -84,47 +84,32 @@ def predict_year(
     return cluster_df.sort_values("time"), cluster
 
 
-def capacity_curve(
-    forecast_df: pd.DataFrame,
-    selected_year: int,
-    latitude: float,
-    longitude: float,
-) -> pd.DataFrame:
-    capacities = [round(value * 0.5, 1) for value in range(2, 81)]
-    rows = []
-    for capacity in capacities:
-        predicted, _ = predict_year(forecast_df, capacity, selected_year, latitude, longitude)
-        rows.append(
-            {
-                "System capacity (kW)": capacity,
-                "Predicted annual production (kWh)": predicted["predicted_monthly_kwh"].sum(),
-            }
-        )
-    return pd.DataFrame(rows)
-
-
 st.set_page_config(page_title="Heat Trace | kWh Prediction Model", layout="wide")
 apply_heat_trace_theme()
 
 st.title("kWh Prediction Model")
 st.caption(
     "This page uses the formula-backed predictor from the model repo to estimate annual solar "
-    "production in kWh from system capacity, forecast temperature, location, and irradiance."
+    "production in kWh from system capacity, forecast temperature, location, and irradiance. "
+    "In plain terms: choose how large the solar system is, pick a place and year, and Heat Trace "
+    "estimates how much electricity that system could generate over the year. kW describes the size "
+    "of the solar system; kWh describes the amount of electricity it produces."
 )
 
 forecast_df = load_forecast()
 available_years = sorted(forecast_df["year"].unique())
 
 summary_cols = st.columns(3)
-summary_cols[0].metric("Prediction target", "Annual kWh")
-summary_cols[1].metric("Forecast clusters", f"{forecast_df['cluster_id'].nunique():,}")
+summary_cols[0].metric("Input", "System size")
+summary_cols[1].metric("Output", "Annual kWh")
 summary_cols[2].metric("Forecast years", f"{min(available_years)}-{max(available_years)}")
 
-st.subheader("Solar production playground")
+st.subheader("Try a solar system size")
 
 input_col, output_col = st.columns([1, 1])
 
 with input_col:
+    st.write("Adjust the values below to see how the yearly production estimate changes.")
     selected_location = st.selectbox("Location preset", list(LOCATION_PRESETS.keys()))
     preset_lat, preset_lon = LOCATION_PRESETS[selected_location]
 
@@ -137,7 +122,7 @@ with input_col:
     )
     selected_year = st.selectbox("Prediction year", available_years, index=0)
 
-    with st.expander("Location inputs"):
+    with st.expander("Fine tune location"):
         latitude = st.number_input("Latitude", value=float(preset_lat), format="%.4f")
         longitude = st.number_input("Longitude", value=float(preset_lon), format="%.4f")
 
@@ -146,17 +131,19 @@ annual_kwh = monthly_df["predicted_monthly_kwh"].sum()
 monthly_average = annual_kwh / 12
 per_kw_output = annual_kwh / capacity_kw
 best_month = monthly_df.loc[monthly_df["predicted_monthly_kwh"].idxmax()]
+lowest_month = monthly_df.loc[monthly_df["predicted_monthly_kwh"].idxmin()]
 
 with output_col:
     st.metric("Predicted annual production", f"{annual_kwh:,.0f} kWh")
     st.metric("Average monthly production", f"{monthly_average:,.0f} kWh")
-    st.metric("Annual output per kW", f"{per_kw_output:,.0f} kWh/kW")
+    st.metric("Best month", f"{best_month['month_label']} ({best_month['predicted_monthly_kwh']:,.0f} kWh)")
     st.write(
-        f"The closest forecast cluster is #{int(cluster['cluster_id'])}, centered near "
-        f"{cluster['cluster_lat']:.2f}, {cluster['cluster_lon']:.2f}. "
-        f"The strongest predicted month is {best_month['month_label']} at "
-        f"{best_month['predicted_monthly_kwh']:,.0f} kWh."
+        f"A {capacity_kw:g} kW system near {selected_location} is estimated to produce "
+        f"{annual_kwh:,.0f} kWh in {selected_year}. Production is strongest in "
+        f"{best_month['month_label']} and weakest in {lowest_month['month_label']}, which reflects "
+        "seasonal changes in sunlight and weather."
     )
+    st.caption(f"Behind the scenes, this location maps to forecast region #{int(cluster['cluster_id'])}.")
 
 monthly_fig = px.bar(
     monthly_df,
@@ -177,51 +164,7 @@ monthly_fig.update_xaxes(gridcolor="rgba(246,236,221,0.12)", categoryorder="arra
 monthly_fig.update_yaxes(gridcolor="rgba(246,236,221,0.12)", zerolinecolor="rgba(246,236,221,0.2)")
 st.plotly_chart(monthly_fig, use_container_width=True, config={"displayModeBar": False})
 
-curve_df = capacity_curve(forecast_df, selected_year, latitude, longitude)
-curve_fig = px.line(
-    curve_df,
-    x="System capacity (kW)",
-    y="Predicted annual production (kWh)",
+st.info(
+    f"Rule of thumb for this setup: each 1 kW of solar capacity produces about "
+    f"{per_kw_output:,.0f} kWh per year in this forecast location."
 )
-curve_fig.add_scatter(
-    x=[capacity_kw],
-    y=[annual_kwh],
-    mode="markers",
-    marker=dict(size=13, color="#F5A623", line=dict(color="#050403", width=1.5)),
-    name="Selected capacity",
-)
-curve_fig.update_traces(line=dict(color="#E96225", width=3), selector=dict(type="scatter", mode="lines"))
-curve_fig.update_layout(
-    height=390,
-    margin=dict(l=10, r=10, t=25, b=10),
-    hovermode="x unified",
-    paper_bgcolor="rgba(0,0,0,0)",
-    plot_bgcolor="rgba(23,16,14,0.52)",
-    font=dict(color="#F6ECDD"),
-)
-curve_fig.update_xaxes(gridcolor="rgba(246,236,221,0.12)", zerolinecolor="rgba(246,236,221,0.2)")
-curve_fig.update_yaxes(gridcolor="rgba(246,236,221,0.12)", zerolinecolor="rgba(246,236,221,0.2)")
-st.plotly_chart(curve_fig, use_container_width=True, config={"displayModeBar": False})
-
-with st.expander("Forecast details for the selected cluster"):
-    st.dataframe(
-        monthly_df[
-            ["month_label", "pred_tavg", "irradiance", "days_in_month", "predicted_monthly_kwh"]
-        ].rename(
-            columns={
-                "month_label": "Month",
-                "pred_tavg": "Avg temp (C)",
-                "irradiance": "Irradiance",
-                "days_in_month": "Days",
-                "predicted_monthly_kwh": "Predicted kWh",
-            }
-        ).style.format(
-            {
-                "Avg temp (C)": "{:.1f}",
-                "Irradiance": "{:.2f}",
-                "Predicted kWh": "{:,.0f}",
-            }
-        ),
-        use_container_width=True,
-        hide_index=True,
-    )
