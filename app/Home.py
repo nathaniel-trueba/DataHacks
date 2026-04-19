@@ -17,7 +17,8 @@ apply_light_mode_background()
 st.title("Heat Trace")
 st.caption(
     "Heat Trace is a data analytics and machine learning project for DataHacks 2026. "
-    "Our model predicts ... "
+    "Our model predicts annual kWh production using solar system capacity, location-based weather, "
+    "average temperature, and sunlight or irradiance inputs. "
     "State-level variation in U.S. energy consumption and solar production reveals where "
     "solar meaningfully offsets demand and where its impact remains marginal. "
     "A kilowatt hour, or kWh, is a measure of energy use: one kWh is the energy needed to "

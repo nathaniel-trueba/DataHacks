@@ -62,10 +62,10 @@ def capacity_curve(sunlight_hours: float, avg_temperature_f: float) -> pd.DataFr
     )
 
 
-st.set_page_config(page_title="Heat Trace | Model", layout="wide")
+st.set_page_config(page_title="Heat Trace | kWh Prediction Model", layout="wide")
 apply_light_mode_background()
 
-st.title("Model")
+st.title("kWh Prediction Model")
 st.caption(
     "Interactive template for a future Heat Trace model that predicts annual solar production in kWh "
     "from system capacity, weather, location, and sunlight."
