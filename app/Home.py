@@ -3,14 +3,11 @@ from __future__ import annotations
 import streamlit as st
 
 from utils import (
-    METRIC_LABELS,
     apply_light_mode_background,
-    choropleth_map,
-    latest_snapshot,
-    load_state_timeseries,
-    metric_help,
-    ranked_states,
-    render_metric_cards,
+    energy_solar_overlay_map,
+    homepage_rankings,
+    load_homepage_map_data,
+    render_homepage_map_cards,
 )
 
 
@@ -23,43 +20,44 @@ st.caption(
     "and environmental indicators move together across states."
 )
 
-df = load_state_timeseries()
-latest = latest_snapshot(df)
-latest_year = int(latest["year"].max())
+map_df = load_homepage_map_data()
 
-st.subheader(f"National overview, {latest_year}")
-render_metric_cards(latest)
+st.subheader("National energy and solar overview")
+render_homepage_map_cards(map_df)
 
-metric = st.selectbox(
-    "Map metric",
-    options=list(METRIC_LABELS.keys()),
-    format_func=lambda key: METRIC_LABELS[key],
-    help="Choose the state-level metric to compare on the map and ranking table.",
+st.caption(
+    "State fill shows energy consumption. Green bubbles show estimated solar production. "
+    "Gray states do not have overlapping data for both metrics."
 )
-st.caption(metric_help(metric))
 
 st.plotly_chart(
-    choropleth_map(latest, metric),
+    energy_solar_overlay_map(map_df),
     use_container_width=True,
     config={"displayModeBar": False, "scrollZoom": False, "doubleClick": False},
 )
 
-st.subheader(f"Top and bottom states by {METRIC_LABELS[metric].lower()}")
-ranked = ranked_states(latest, metric, n=5)
-display_col = METRIC_LABELS[metric]
-formatter = {display_col: "{:.1%}"} if metric == "solar_growth_rate" else {display_col: "{:,.3f}"}
-if metric not in {"clean_ratio", "emissions_intensity", "solar_growth_rate"}:
-    formatter = {display_col: "{:,.0f}"}
+st.subheader("Top states in the overlapping dataset")
+consumption_col, solar_col = st.columns(2)
 
-st.dataframe(
-    ranked.style.format(formatter),
-    use_container_width=True,
-    hide_index=True,
-)
+with consumption_col:
+    st.write("Energy consumption")
+    st.dataframe(
+        homepage_rankings(map_df, "energy_consumption").style.format({"Value": "{:,.0f}"}),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+with solar_col:
+    st.write("Estimated solar production")
+    st.dataframe(
+        homepage_rankings(map_df, "solar_production").style.format({"Value": "{:,.0f}"}),
+        use_container_width=True,
+        hide_index=True,
+    )
 
 with st.expander("About this prototype"):
     st.write(
-        "Heat Trace currently uses generated state-level mock data stored as parquet. "
-        "The app is organized so future EIA, ZenPower, and EPA ingestion can write the same "
-        "processed schema into `data/processed/` without changing the Streamlit pages."
+        "The Home map uses state-level rows with overlapping energy consumption and estimated "
+        "solar production data. Other states are intentionally shown in gray so missing coverage "
+        "is visible rather than hidden."
     )

@@ -12,6 +12,7 @@ import plotly.graph_objects as go
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = PROJECT_ROOT / "data" / "processed" / "heat_trace_state_timeseries.parquet"
+HOME_MAP_DATA_PATH = PROJECT_ROOT / "data" / "processed" / "homepage_mapdata.csv"
 
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
@@ -34,6 +35,59 @@ CHART_METRICS = [
     "solar_capacity_added",
     "co2_emissions",
     "air_quality_index",
+]
+
+US_STATE_ABBRS = [
+    "AL",
+    "AK",
+    "AZ",
+    "AR",
+    "CA",
+    "CO",
+    "CT",
+    "DE",
+    "FL",
+    "GA",
+    "HI",
+    "ID",
+    "IL",
+    "IN",
+    "IA",
+    "KS",
+    "KY",
+    "LA",
+    "ME",
+    "MD",
+    "MA",
+    "MI",
+    "MN",
+    "MS",
+    "MO",
+    "MT",
+    "NE",
+    "NV",
+    "NH",
+    "NJ",
+    "NM",
+    "NY",
+    "NC",
+    "ND",
+    "OH",
+    "OK",
+    "OR",
+    "PA",
+    "RI",
+    "SC",
+    "SD",
+    "TN",
+    "TX",
+    "UT",
+    "VT",
+    "VA",
+    "WA",
+    "WV",
+    "WI",
+    "WY",
 ]
 
 
@@ -112,6 +166,15 @@ def load_state_timeseries() -> pd.DataFrame:
     return compute_metrics(df)
 
 
+def load_homepage_map_data() -> pd.DataFrame:
+    df = pd.read_csv(HOME_MAP_DATA_PATH)
+    df = df.rename(columns={"state": "state_abbr"}).copy()
+    df["state_abbr"] = df["state_abbr"].str.upper().str.strip()
+    df["solar_production"] = pd.to_numeric(df["solar_production"], errors="coerce")
+    df["energy_consumption"] = pd.to_numeric(df["energy_consumption"], errors="coerce")
+    return df.dropna(subset=["state_abbr", "solar_production", "energy_consumption"])
+
+
 def compute_metrics(df: pd.DataFrame) -> pd.DataFrame:
     """Compute derived metrics so real ingestion can feed the same app contract."""
     df = df.copy().sort_values(["state", "date"])
@@ -174,6 +237,110 @@ def render_metric_cards(latest: pd.DataFrame) -> None:
     cols[1].metric("Energy produced", f"{total_production:,.0f}")
     cols[2].metric("Solar added", f"{total_solar:,.0f}")
     cols[3].metric("Avg AQI", f"{avg_aqi:.0f}")
+
+
+def render_homepage_map_cards(map_df: pd.DataFrame) -> None:
+    import streamlit as st
+
+    top_consumption = map_df.nlargest(1, "energy_consumption").iloc[0]
+    top_solar = map_df.nlargest(1, "solar_production").iloc[0]
+
+    cols = st.columns(4)
+    cols[0].metric("States with overlap", f"{len(map_df)}")
+    cols[1].metric("Total consumption", f"{map_df['energy_consumption'].sum():,.0f}")
+    cols[2].metric("Top consumption", f"{top_consumption['state_abbr']} - {top_consumption['energy_consumption']:,.0f}")
+    cols[3].metric("Top solar production", f"{top_solar['state_abbr']} - {top_solar['solar_production']:,.0f}")
+
+
+def energy_solar_overlay_map(map_df: pd.DataFrame) -> go.Figure:
+    data_states = set(map_df["state_abbr"])
+    missing_states = [abbr for abbr in US_STATE_ABBRS if abbr not in data_states]
+    max_solar = map_df["solar_production"].max()
+    bubble_sizes = 10 + 42 * np.sqrt(map_df["solar_production"] / max_solar)
+
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Choropleth(
+            locations=missing_states,
+            locationmode="USA-states",
+            z=[1] * len(missing_states),
+            colorscale=[[0, "#9ca3af"], [1, "#9ca3af"]],
+            showscale=False,
+            marker_line_color="rgba(255, 255, 255, 0.75)",
+            marker_line_width=0.8,
+            hovertemplate="%{location}<br>No overlapping data<extra></extra>",
+            name="No overlapping data",
+        )
+    )
+
+    fig.add_trace(
+        go.Choropleth(
+            locations=map_df["state_abbr"],
+            locationmode="USA-states",
+            z=map_df["energy_consumption"],
+            colorscale="YlOrRd",
+            marker_line_color="rgba(255, 255, 255, 0.85)",
+            marker_line_width=0.9,
+            colorbar=dict(title="Energy consumption"),
+            customdata=np.stack([map_df["solar_production"]], axis=-1),
+            hovertemplate=(
+                "%{location}<br>"
+                "Energy consumption: %{z:,.0f}<br>"
+                "Solar production: %{customdata[0]:,.0f}<extra></extra>"
+            ),
+            name="Energy consumption",
+        )
+    )
+
+    fig.add_trace(
+        go.Scattergeo(
+            locations=map_df["state_abbr"],
+            locationmode="USA-states",
+            mode="markers",
+            marker=dict(
+                size=bubble_sizes,
+                color="rgba(34, 197, 94, 0.62)",
+                line=dict(color="rgba(17, 24, 39, 0.85)", width=1.2),
+            ),
+            customdata=np.stack([map_df["solar_production"], map_df["energy_consumption"]], axis=-1),
+            hovertemplate=(
+                "%{location}<br>"
+                "Solar production: %{customdata[0]:,.0f}<br>"
+                "Energy consumption: %{customdata[1]:,.0f}<extra></extra>"
+            ),
+            name="Solar production",
+        )
+    )
+
+    fig.update_layout(
+        dragmode=False,
+        height=520,
+        margin=dict(l=0, r=0, t=10, b=0),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        legend=dict(orientation="h", yanchor="bottom", y=0.0, xanchor="left", x=0.0),
+    )
+    fig.update_geos(
+        scope="usa",
+        bgcolor="rgba(0,0,0,0)",
+        showland=False,
+        showocean=False,
+        showlakes=False,
+        showcoastlines=False,
+        showcountries=False,
+        showsubunits=False,
+        showframe=False,
+    )
+    return fig
+
+
+def homepage_rankings(map_df: pd.DataFrame, metric: str, n: int = 5) -> pd.DataFrame:
+    return (
+        map_df.nlargest(n, metric)[["state_abbr", metric]]
+        .rename(columns={"state_abbr": "State", metric: "Value"})
+        .reset_index(drop=True)
+    )
 
 
 def choropleth_map(latest: pd.DataFrame, metric: str) -> go.Figure:
