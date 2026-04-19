@@ -124,6 +124,78 @@ def load_us_states_geojson() -> dict:
         return json.load(f)
 
 
+def _geojson_polygon_rings(geojson: dict) -> list[list[list[float]]]:
+    rings = []
+    for feature in geojson["features"]:
+        geometry = feature["geometry"]
+        if geometry["type"] == "Polygon":
+            rings.extend(geometry["coordinates"])
+        elif geometry["type"] == "MultiPolygon":
+            for polygon in geometry["coordinates"]:
+                rings.extend(polygon)
+    return rings
+
+
+def _geojson_exterior_lines(geojson: dict) -> tuple[list[float | None], list[float | None]]:
+    lons = []
+    lats = []
+    for feature in geojson["features"]:
+        geometry = feature["geometry"]
+        polygons = [geometry["coordinates"]] if geometry["type"] == "Polygon" else geometry["coordinates"]
+        for polygon in polygons:
+            exterior = polygon[0]
+            for lon, lat in exterior:
+                if -130 <= lon <= -60 and 20 <= lat <= 55:
+                    lons.append(lon)
+                    lats.append(lat)
+            lons.append(None)
+            lats.append(None)
+    return lons, lats
+
+
+def _point_in_ring(lon: float, lat: float, ring: list[list[float]]) -> bool:
+    inside = False
+    j = len(ring) - 1
+    for i, point in enumerate(ring):
+        xi, yi = point
+        xj, yj = ring[j]
+        intersects = ((yi > lat) != (yj > lat)) and (
+            lon < (xj - xi) * (lat - yi) / ((yj - yi) or 1e-12) + xi
+        )
+        if intersects:
+            inside = not inside
+        j = i
+    return inside
+
+
+@st.cache_data
+def build_heat_surface(grid_df: pd.DataFrame, states_geojson: dict) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    lon_axis = np.linspace(grid_df["cluster_lon"].min() - 1.2, grid_df["cluster_lon"].max() + 1.2, 150)
+    lat_axis = np.linspace(grid_df["cluster_lat"].min() - 1.2, grid_df["cluster_lat"].max() + 1.2, 82)
+    lon_mesh, lat_mesh = np.meshgrid(lon_axis, lat_axis)
+
+    point_lons = grid_df["cluster_lon"].to_numpy()
+    point_lats = grid_df["cluster_lat"].to_numpy()
+    values = grid_df["predicted_monthly_kwh"].to_numpy()
+
+    lon_distance = lon_mesh[..., None] - point_lons
+    lat_distance = lat_mesh[..., None] - point_lats
+    distance_squared = lon_distance**2 + lat_distance**2
+    weights = 1 / np.maximum(distance_squared, 0.08)
+    heat = (weights * values).sum(axis=2) / weights.sum(axis=2)
+
+    rings = _geojson_polygon_rings(states_geojson)
+    land_mask = np.zeros(lon_mesh.shape, dtype=bool)
+    for row_idx in range(lon_mesh.shape[0]):
+        for col_idx in range(lon_mesh.shape[1]):
+            lon = float(lon_mesh[row_idx, col_idx])
+            lat = float(lat_mesh[row_idx, col_idx])
+            land_mask[row_idx, col_idx] = any(_point_in_ring(lon, lat, ring) for ring in rings)
+
+    heat[~land_mask] = np.nan
+    return lon_axis, lat_axis, heat
+
+
 def render_prediction_grid_map(
     grid_df: pd.DataFrame,
     selected_cluster: pd.Series,
@@ -131,60 +203,46 @@ def render_prediction_grid_map(
 ) -> go.Figure:
     fig = go.Figure()
     states_geojson = load_us_states_geojson()
-    state_ids = [feature["id"] for feature in states_geojson["features"]]
+    lon_axis, lat_axis, heat = build_heat_surface(grid_df, states_geojson)
+    outline_lons, outline_lats = _geojson_exterior_lines(states_geojson)
 
     fig.add_trace(
-        go.Choropleth(
-            geojson=states_geojson,
-            locations=state_ids,
-            z=[1] * len(state_ids),
-            featureidkey="id",
-            colorscale=[[0, "rgba(246, 236, 221, 0.12)"], [1, "rgba(246, 236, 221, 0.12)"]],
-            marker_line_color="rgba(246, 236, 221, 0.34)",
-            marker_line_width=0.7,
-            showscale=False,
-            hoverinfo="skip",
+        go.Contour(
+            x=lon_axis,
+            y=lat_axis,
+            z=heat,
+            colorscale=HEAT_CONTINUOUS_SCALE,
+            contours=dict(coloring="heatmap", showlines=False),
+            connectgaps=False,
+            opacity=0.86,
+            colorbar=dict(
+                title=dict(text="Avg monthly kWh", font=dict(color=HEAT_MUTED)),
+                tickfont=dict(color=HEAT_MUTED),
+                bgcolor="rgba(0,0,0,0)",
+                outlinecolor="rgba(246, 236, 221, 0.18)",
+            ),
+            hovertemplate=(
+                "Predicted avg monthly production: %{z:,.0f} kWh<br>"
+                "Lat/Lon: %{y:.2f}, %{x:.2f}<extra></extra>"
+            ),
         )
     )
 
     fig.add_trace(
-        go.Scattergeo(
-            lat=grid_df["cluster_lat"],
-            lon=grid_df["cluster_lon"],
-            mode="markers",
-            marker=dict(
-                symbol="circle",
-                size=30,
-                color=grid_df["predicted_monthly_kwh"],
-                colorscale=HEAT_CONTINUOUS_SCALE,
-                opacity=0.46,
-                line=dict(width=0),
-                colorbar=dict(
-                    title=dict(text="Avg monthly kWh", font=dict(color=HEAT_MUTED)),
-                    tickfont=dict(color=HEAT_MUTED),
-                    bgcolor="rgba(0,0,0,0)",
-                    outlinecolor="rgba(246, 236, 221, 0.18)",
-                ),
-            ),
-            customdata=np.stack(
-                [grid_df["cluster_id"], grid_df["avg_temp_c"], grid_df["avg_irradiance"]],
-                axis=-1,
-            ),
-            hovertemplate=(
-                "Forecast grid %{customdata[0]}<br>"
-                "Predicted avg monthly production: %{marker.color:,.0f} kWh<br>"
-                "Lat/Lon: %{lat:.2f}, %{lon:.2f}<br>"
-                "Avg temp: %{customdata[1]:.1f} C<br>"
-                "Avg irradiance: %{customdata[2]:.2f}<extra></extra>"
-            ),
+        go.Scatter(
+            x=outline_lons,
+            y=outline_lats,
+            mode="lines",
+            line=dict(color="rgba(246, 236, 221, 0.32)", width=1),
+            hoverinfo="skip",
             showlegend=False,
         )
     )
 
     fig.add_trace(
-        go.Scattergeo(
-            lat=[selected_cluster["cluster_lat"]],
-            lon=[selected_cluster["cluster_lon"]],
+        go.Scatter(
+            x=[selected_cluster["cluster_lon"]],
+            y=[selected_cluster["cluster_lat"]],
             mode="markers+text",
             text=["Selected area"],
             textposition="top center",
@@ -201,21 +259,6 @@ def render_prediction_grid_map(
         )
     )
 
-    fig.update_geos(
-        scope="usa",
-        projection_type="albers usa",
-        bgcolor="rgba(0,0,0,0)",
-        showland=True,
-        landcolor="rgba(246, 236, 221, 0.06)",
-        showlakes=True,
-        lakecolor="rgba(5, 4, 3, 0.6)",
-        showocean=False,
-        showcoastlines=False,
-        showcountries=False,
-        showsubunits=True,
-        subunitcolor="rgba(246, 236, 221, 0.16)",
-        showframe=False,
-    )
     fig.update_layout(
         height=610,
         dragmode=False,
@@ -224,6 +267,8 @@ def render_prediction_grid_map(
         plot_bgcolor="rgba(0,0,0,0)",
         font=dict(color=HEAT_TEXT),
     )
+    fig.update_xaxes(visible=False, range=[-126, -66], fixedrange=True)
+    fig.update_yaxes(visible=False, range=[24, 50], fixedrange=True, scaleanchor="x", scaleratio=1)
     return fig
 
 
