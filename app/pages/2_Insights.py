@@ -27,6 +27,7 @@ st.caption(
 permit_count_chart_path = APP_DIR / "assets" / "top_cities_by_permit_count.png"
 avg_system_chart_path = APP_DIR / "assets" / "top_cities_by_avg_system_size_per_permit.png"
 adoption_time_chart_path = APP_DIR / "assets" / "solar_permit_adoption_over_time.png"
+energy_environment_chart_path = APP_DIR / "assets" / "national_energy_environment_by_state.png"
 
 st.subheader("Where individual solar buying is happening at scale")
 st.image(permit_count_chart_path, use_container_width=True)
@@ -81,4 +82,20 @@ st.write(
     "or a genuine surge in demand. As of mid-April 2026, the month has recorded 1,151 permits — "
     "still well above the historical baseline, though April is not yet complete. Even so, the level "
     "is far above pre-2023 norms, suggesting that the floor for solar adoption has permanently moved higher."
+)
+
+st.divider()
+
+st.subheader("Energy, emissions, and air quality do not always move together")
+st.image(energy_environment_chart_path, use_container_width=True)
+st.write(
+    "Graph 1 shows how dirty each state's energy use is: Vermont, New Hampshire, and Connecticut have "
+    "the lowest CO2 emissions per unit of energy consumed, while Louisiana and Alaska are much higher. "
+    "Graph 2 shows renewable energy use relative to total consumption, where Connecticut, Rhode Island, "
+    "and New Hampshire lead and Alaska and Louisiana fall near the bottom, connecting low renewable use "
+    "with higher emissions intensity. Graph 3 adds the real-world environmental outcome: Hawaii and "
+    "Alaska have the cleanest air, while California, Oklahoma, and DC have worse air quality, showing "
+    "that a cleaner energy mix does not automatically translate into cleaner air. In the end, clean "
+    "energy adoption and environmental outcomes are not the same thing, and the gap between them is "
+    "where the problem lives."
 )
