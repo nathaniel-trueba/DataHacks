@@ -78,12 +78,13 @@ class MonthlyKwhTableFromFormula:
 
         return result
     
-formula_predictor = MonthlyKwhTableFromFormula()
+if __name__ == "__main__":
+    formula_predictor = MonthlyKwhTableFromFormula()
 
-jan_2026_formula = formula_predictor.predict_table(
-    kw_capacity=5.0,
-    month=1,
-    year=2026
-)
+    jan_2026_formula = formula_predictor.predict_table(
+        kw_capacity=5.0,
+        month=1,
+        year=2026
+    )
 
-print(jan_2026_formula.head())
+    print(jan_2026_formula.head())

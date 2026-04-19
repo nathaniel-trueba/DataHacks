@@ -94,12 +94,13 @@ class MonthlyKwhTableFromModel:
 
         return result
     
-model_predictor = MonthlyKwhTableFromModel()
+if __name__ == "__main__":
+    model_predictor = MonthlyKwhTableFromModel()
 
-jan_2026_model = model_predictor.predict_table(
-    kw_capacity=5.0,
-    month=1,
-    year=2026
-)
+    jan_2026_model = model_predictor.predict_table(
+        kw_capacity=5.0,
+        month=1,
+        year=2026
+    )
 
-print(jan_2026_model.head())
+    print(jan_2026_model.head())

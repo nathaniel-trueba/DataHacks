@@ -11,7 +11,7 @@ import streamlit as st
 
 APP_DIR = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = APP_DIR.parent
-FORECAST_PATH = PROJECT_ROOT / "data" / "processed" / "us_10yr_monthly_cluster_forecast_with_irridance.csv"
+FORECAST_PATH = APP_DIR / "us_10yr_monthly_cluster_forecast_with_irridance.csv"
 
 if str(APP_DIR) not in sys.path:
     sys.path.append(str(APP_DIR))
@@ -44,6 +44,18 @@ def load_forecast() -> pd.DataFrame:
     return df
 
 
+@st.cache_resource
+def load_predictor():
+    try:
+        from Model_Predictor import MonthlyKwhTableFromModel
+
+        return MonthlyKwhTableFromModel(), "ML model predictor"
+    except (FileNotFoundError, ImportError, ModuleNotFoundError):
+        from Formula_Predictor import MonthlyKwhTableFromFormula
+
+        return MonthlyKwhTableFromFormula(), "Formula-backed predictor"
+
+
 def nearest_cluster(forecast_df: pd.DataFrame, latitude: float, longitude: float) -> pd.Series:
     clusters = forecast_df[["cluster_id", "cluster_lat", "cluster_lon"]].drop_duplicates().copy()
     clusters["distance"] = np.sqrt(
@@ -52,56 +64,19 @@ def nearest_cluster(forecast_df: pd.DataFrame, latitude: float, longitude: float
     return clusters.loc[clusters["distance"].idxmin()]
 
 
-def estimate_monthly_kwh(
-    kw_capacity: float,
-    irradiance: pd.Series,
-    avg_temp_c: pd.Series,
-    days_in_month: pd.Series,
-    performance_ratio: float = 0.75,
-    temp_coeff: float = 0.004,
-    min_temp_loss: float = 0.80,
-) -> pd.Series:
-    temp_loss = 1 - np.maximum(avg_temp_c - 25, 0) * temp_coeff
-    temp_loss = np.maximum(temp_loss, min_temp_loss)
-    return kw_capacity * irradiance * days_in_month * performance_ratio * temp_loss
-
-
-def predict_year(
-    forecast_df: pd.DataFrame,
-    kw_capacity: float,
-    year: int,
-    latitude: float,
-    longitude: float,
-) -> tuple[pd.DataFrame, pd.Series]:
-    cluster = nearest_cluster(forecast_df, latitude, longitude)
-    cluster_df = forecast_df[
-        (forecast_df["cluster_id"] == cluster["cluster_id"]) & (forecast_df["year"] == year)
-    ].copy()
-
-    if cluster_df.empty:
-        raise ValueError(f"No forecast rows found for {year}.")
-
-    cluster_df["days_in_month"] = cluster_df["time"].dt.days_in_month
-    cluster_df["predicted_monthly_kwh"] = estimate_monthly_kwh(
-        kw_capacity=kw_capacity,
-        irradiance=cluster_df["irradiance"],
-        avg_temp_c=cluster_df["pred_tavg"],
-        days_in_month=cluster_df["days_in_month"],
-    )
-    cluster_df["month_label"] = cluster_df["time"].dt.strftime("%b")
-    return cluster_df.sort_values("time"), cluster
-
-
 @st.cache_data
-def build_prediction_grid(forecast_df: pd.DataFrame, kw_capacity: float, year: int) -> pd.DataFrame:
-    year_df = forecast_df[forecast_df["year"] == year].copy()
-    year_df["days_in_month"] = year_df["time"].dt.days_in_month
-    year_df["predicted_monthly_kwh"] = estimate_monthly_kwh(
-        kw_capacity=kw_capacity,
-        irradiance=year_df["irradiance"],
-        avg_temp_c=year_df["pred_tavg"],
-        days_in_month=year_df["days_in_month"],
-    )
+def build_prediction_grid(_predictor, kw_capacity: float, year: int) -> pd.DataFrame:
+    month_tables = []
+    for month in range(1, 13):
+        month_df = _predictor.predict_table(
+            kw_capacity=kw_capacity,
+            month=month,
+            year=year,
+        ).copy()
+        month_df["month"] = month
+        month_tables.append(month_df)
+
+    year_df = pd.concat(month_tables, ignore_index=True)
 
     return (
         year_df.groupby(["cluster_id", "cluster_lat", "cluster_lon"], as_index=False)
@@ -112,6 +87,32 @@ def build_prediction_grid(forecast_df: pd.DataFrame, kw_capacity: float, year: i
         )
         .sort_values("predicted_annual_kwh", ascending=False)
     )
+
+
+def build_selected_monthly_table(
+    grid_df: pd.DataFrame,
+    _predictor,
+    kw_capacity: float,
+    year: int,
+    latitude: float,
+    longitude: float,
+) -> tuple[pd.DataFrame, pd.Series]:
+    cluster = nearest_cluster(grid_df, latitude, longitude)
+    selected_rows = []
+
+    for month in range(1, 13):
+        month_df = _predictor.predict_table(
+            kw_capacity=kw_capacity,
+            month=month,
+            year=year,
+        ).copy()
+        selected = month_df[month_df["cluster_id"] == cluster["cluster_id"]].iloc[0].copy()
+        selected["month"] = month
+        selected["month_label"] = pd.Timestamp(year=year, month=month, day=1).strftime("%b")
+        selected_rows.append(selected.to_dict())
+
+    monthly_df = pd.DataFrame(selected_rows)
+    return monthly_df, cluster
 
 
 @st.cache_data
@@ -243,12 +244,14 @@ st.caption(
 )
 
 forecast_df = load_forecast()
+predictor, predictor_label = load_predictor()
 available_years = sorted(forecast_df["year"].unique())
 
 summary_cols = st.columns(3)
 summary_cols[0].metric("Input", "System size")
 summary_cols[1].metric("Output", "Annual kWh")
 summary_cols[2].metric("Forecast years", f"{min(available_years)}-{max(available_years)}")
+st.caption(f"Current prediction engine: {predictor_label}.")
 
 st.subheader("Try a solar system size")
 
@@ -272,8 +275,15 @@ with input_col:
         latitude = st.number_input("Latitude", value=float(preset_lat), format="%.4f")
         longitude = st.number_input("Longitude", value=float(preset_lon), format="%.4f")
 
-monthly_df, cluster = predict_year(forecast_df, capacity_kw, selected_year, latitude, longitude)
-grid_df = build_prediction_grid(forecast_df, capacity_kw, selected_year)
+grid_df = build_prediction_grid(predictor, capacity_kw, selected_year)
+monthly_df, cluster = build_selected_monthly_table(
+    grid_df,
+    predictor,
+    capacity_kw,
+    selected_year,
+    latitude,
+    longitude,
+)
 annual_kwh = monthly_df["predicted_monthly_kwh"].sum()
 monthly_average = annual_kwh / 12
 per_kw_output = annual_kwh / capacity_kw
