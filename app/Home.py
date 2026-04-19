@@ -27,7 +27,6 @@ render_homepage_map_cards(map_df)
 
 st.caption(
     "State fill shows energy consumption. Green bubbles show estimated solar production. "
-    "Gray states only appear when neither metric is available."
 )
 
 st.plotly_chart(
