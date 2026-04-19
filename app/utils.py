@@ -214,12 +214,29 @@ def load_state_timeseries() -> pd.DataFrame:
 
 
 def load_homepage_map_data() -> pd.DataFrame:
-    df = pd.read_csv(HOME_MAP_DATA_PATH)
-    df = df.rename(columns={"state": "state_abbr"}).copy()
-    df["state_abbr"] = df["state_abbr"].str.upper().str.strip()
-    df["solar_production"] = pd.to_numeric(df["solar_production"], errors="coerce")
-    df["energy_consumption"] = pd.to_numeric(df["energy_consumption"], errors="coerce")
-    return df.dropna(subset=["state_abbr", "solar_production", "energy_consumption"])
+    ensure_energy_data()
+
+    energy_df = pd.read_csv(DATA_PATH)
+    energy_df = energy_df.rename(columns={"state": "state_abbr"}).copy()
+    energy_df["state_abbr"] = energy_df["state_abbr"].str.upper().str.strip()
+    energy_df["energy_consumption"] = pd.to_numeric(energy_df["energy_btu"], errors="coerce")
+    latest_year = int(energy_df["year"].max())
+    energy_latest = energy_df[
+        (energy_df["year"] == latest_year) & (energy_df["state_abbr"].isin(US_STATE_ABBRS))
+    ][["state_abbr", "energy_consumption"]]
+
+    solar_df = pd.read_csv(HOME_MAP_DATA_PATH)
+    solar_df = solar_df.rename(columns={"state": "state_abbr"}).copy()
+    solar_df["state_abbr"] = solar_df["state_abbr"].str.upper().str.strip()
+    solar_df["solar_production"] = pd.to_numeric(solar_df["solar_production"], errors="coerce")
+    solar_df = solar_df[["state_abbr", "solar_production"]].dropna(subset=["state_abbr"])
+
+    map_df = energy_latest.merge(solar_df, on="state_abbr", how="outer")
+    map_df = map_df[map_df["state_abbr"].isin(US_STATE_ABBRS)].copy()
+    map_df["state"] = map_df["state_abbr"].map(STATE_NAME_BY_ABBR).fillna(map_df["state_abbr"])
+    map_df["has_energy"] = map_df["energy_consumption"].notna()
+    map_df["has_solar"] = map_df["solar_production"].notna()
+    return map_df.sort_values("state").reset_index(drop=True)
 
 
 def compute_metrics(df: pd.DataFrame) -> pd.DataFrame:
@@ -267,23 +284,34 @@ def render_metric_cards(latest: pd.DataFrame) -> None:
 def render_homepage_map_cards(map_df: pd.DataFrame) -> None:
     import streamlit as st
 
-    top_consumption = map_df.nlargest(1, "energy_consumption").iloc[0]
-    top_solar = map_df.nlargest(1, "solar_production").iloc[0]
+    energy_df = map_df.dropna(subset=["energy_consumption"])
+    solar_df = map_df.dropna(subset=["solar_production"])
+    overlap_count = int((map_df["has_energy"] & map_df["has_solar"]).sum())
+    top_consumption = energy_df.nlargest(1, "energy_consumption").iloc[0]
+    top_solar = solar_df.nlargest(1, "solar_production").iloc[0]
 
-    top_row = st.columns(2)
-    top_row[0].metric("States with overlap", f"{len(map_df)}")
-    top_row[1].metric("Total consumption (MWh)", f"{map_df['energy_consumption'].sum():,.0f}")
+    top_row = st.columns(4)
+    top_row[0].metric("States with energy data", f"{len(energy_df)}")
+    top_row[1].metric("States with solar data", f"{len(solar_df)}")
+    top_row[2].metric("States with both", f"{overlap_count}")
+    top_row[3].metric("Total consumption (BTU)", f"{energy_df['energy_consumption'].sum():,.0f}")
 
     bottom_row = st.columns(2)
-    bottom_row[0].metric("Top consumption", f"{top_consumption['state_abbr']} - {top_consumption['energy_consumption']:,.0f} MWh")
+    bottom_row[0].metric("Top consumption", f"{top_consumption['state_abbr']} - {top_consumption['energy_consumption']:,.0f} BTU")
     bottom_row[1].metric("Top solar production", f"{top_solar['state_abbr']} - {top_solar['solar_production']:,.0f} kWh")
 
 
 def energy_solar_overlay_map(map_df: pd.DataFrame) -> go.Figure:
-    data_states = set(map_df["state_abbr"])
+    energy_df = map_df.dropna(subset=["energy_consumption"]).copy()
+    solar_df = map_df.dropna(subset=["solar_production"]).copy()
+    energy_df["solar_display"] = energy_df["solar_production"].map(
+        lambda value: f"{value:,.0f}" if pd.notna(value) else "Not available"
+    )
+    solar_df["energy_display"] = solar_df["energy_consumption"].map(
+        lambda value: f"{value:,.0f}" if pd.notna(value) else "Not available"
+    )
+    data_states = set(energy_df["state_abbr"]) | set(solar_df["state_abbr"])
     missing_states = [abbr for abbr in US_STATE_ABBRS if abbr not in data_states]
-    max_solar = map_df["solar_production"].max()
-    bubble_sizes = 10 + 42 * np.sqrt(map_df["solar_production"] / max_solar)
 
     fig = go.Figure()
 
@@ -303,42 +331,45 @@ def energy_solar_overlay_map(map_df: pd.DataFrame) -> go.Figure:
 
     fig.add_trace(
         go.Choropleth(
-            locations=map_df["state_abbr"],
+            locations=energy_df["state_abbr"],
             locationmode="USA-states",
-            z=map_df["energy_consumption"],
+            z=energy_df["energy_consumption"],
             colorscale="YlOrRd",
             marker_line_color="rgba(255, 255, 255, 0.85)",
             marker_line_width=0.9,
-            colorbar=dict(title="Energy consumption"),
-            customdata=np.stack([map_df["solar_production"]], axis=-1),
+            colorbar=dict(title="Energy consumption (BTU)"),
+            customdata=np.stack([energy_df["solar_display"]], axis=-1),
             hovertemplate=(
                 "%{location}<br>"
                 "Energy consumption: %{z:,.0f}<br>"
-                "Solar production: %{customdata[0]:,.0f}<extra></extra>"
+                "Solar production: %{customdata[0]}<extra></extra>"
             ),
             name="Energy consumption",
         )
     )
 
-    fig.add_trace(
-        go.Scattergeo(
-            locations=map_df["state_abbr"],
-            locationmode="USA-states",
-            mode="markers",
-            marker=dict(
-                size=bubble_sizes,
-                color="rgba(34, 197, 94, 0.62)",
-                line=dict(color="rgba(17, 24, 39, 0.85)", width=1.2),
-            ),
-            customdata=np.stack([map_df["solar_production"], map_df["energy_consumption"]], axis=-1),
-            hovertemplate=(
-                "%{location}<br>"
-                "Solar production: %{customdata[0]:,.0f}<br>"
-                "Energy consumption: %{customdata[1]:,.0f}<extra></extra>"
-            ),
-            name="Solar production",
+    if not solar_df.empty:
+        max_solar = solar_df["solar_production"].max()
+        bubble_sizes = 10 + 42 * np.sqrt(solar_df["solar_production"] / max_solar)
+        fig.add_trace(
+            go.Scattergeo(
+                locations=solar_df["state_abbr"],
+                locationmode="USA-states",
+                mode="markers",
+                marker=dict(
+                    size=bubble_sizes,
+                    color="rgba(34, 197, 94, 0.62)",
+                    line=dict(color="rgba(17, 24, 39, 0.85)", width=1.2),
+                ),
+                customdata=np.stack([solar_df["solar_production"], solar_df["energy_display"]], axis=-1),
+                hovertemplate=(
+                    "%{location}<br>"
+                    "Solar production: %{customdata[0]:,.0f}<br>"
+                    "Energy consumption: %{customdata[1]}<extra></extra>"
+                ),
+                name="Solar production",
+            )
         )
-    )
 
     fig.update_layout(
         dragmode=False,
@@ -364,7 +395,8 @@ def energy_solar_overlay_map(map_df: pd.DataFrame) -> go.Figure:
 
 def homepage_rankings(map_df: pd.DataFrame, metric: str, n: int = 5) -> pd.DataFrame:
     return (
-        map_df.nlargest(n, metric)[["state_abbr", metric]]
+        map_df.dropna(subset=[metric])
+        .nlargest(n, metric)[["state_abbr", metric]]
         .rename(columns={"state_abbr": "State", metric: "Value"})
         .reset_index(drop=True)
     )

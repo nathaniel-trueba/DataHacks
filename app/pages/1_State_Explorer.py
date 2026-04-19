@@ -28,7 +28,7 @@ st.caption("Explore annual energy consumption for the states with both energy an
 
 df = load_state_timeseries()
 map_df = load_homepage_map_data()
-covered_abbrs = set(map_df["state_abbr"])
+covered_abbrs = set(map_df.loc[map_df["has_energy"] & map_df["has_solar"], "state_abbr"])
 df = df[df["state_abbr"].isin(covered_abbrs)].copy()
 states = df["state"].drop_duplicates().sort_values().tolist()
 

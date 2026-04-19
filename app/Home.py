@@ -27,7 +27,7 @@ render_homepage_map_cards(map_df)
 
 st.caption(
     "State fill shows energy consumption. Green bubbles show estimated solar production. "
-    "Gray states do not have overlapping data for both metrics."
+    "Gray states only appear when neither metric is available."
 )
 
 st.plotly_chart(
@@ -36,7 +36,7 @@ st.plotly_chart(
     config={"displayModeBar": False, "scrollZoom": False, "doubleClick": False},
 )
 
-st.subheader("Top states in the overlapping dataset")
+st.subheader("Top states by available metric")
 consumption_col, solar_col = st.columns(2)
 
 with consumption_col:
@@ -57,7 +57,8 @@ with solar_col:
 
 with st.expander("About this prototype"):
     st.write(
-        "The Home map uses state-level rows with overlapping energy consumption and estimated "
-        "solar production data. Other states are intentionally shown in gray so missing coverage "
-        "is visible rather than hidden."
+        "The Home map combines the latest state energy consumption data with available estimated "
+        "solar production rows. States can still show an energy fill even when solar production is "
+        "missing, and solar bubbles can appear wherever solar production is available. Gray is "
+        "reserved for states where neither metric is currently loaded."
     )
