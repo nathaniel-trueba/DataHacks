@@ -28,6 +28,7 @@ permit_count_chart_path = APP_DIR / "assets" / "top_cities_by_permit_count.png"
 avg_system_chart_path = APP_DIR / "assets" / "top_cities_by_avg_system_size_per_permit.png"
 adoption_time_chart_path = APP_DIR / "assets" / "solar_permit_adoption_over_time.png"
 energy_environment_chart_path = APP_DIR / "assets" / "national_energy_environment_by_state.png"
+solar_air_quality_gap_chart_path = APP_DIR / "assets" / "solar_adoption_air_quality_gap.png"
 
 st.subheader("Where individual solar buying is happening at scale")
 st.image(permit_count_chart_path, use_container_width=True)
@@ -98,4 +99,19 @@ st.write(
     "that a cleaner energy mix does not automatically translate into cleaner air. In the end, clean "
     "energy adoption and environmental outcomes are not the same thing, and the gap between them is "
     "where the problem lives."
+)
+
+st.divider()
+
+st.subheader("The gap: high solar adoption, still bad air")
+st.image(solar_air_quality_gap_chart_path, use_container_width=True)
+st.write(
+    "The scatter plot divides states into four stories: high solar with bad air, high solar with good "
+    "air, low solar with bad air, and the middle of the pack. California and Texas are the key gap "
+    "states because they have major solar activity but still show some of the worst air quality in "
+    "this subset. Washington and Oregon look closer to success stories, combining stronger solar "
+    "adoption with cleaner air, while Arkansas and Ohio sit in the neglected zone with poor air and "
+    "little solar. The main takeaway is that solar growth by itself is not enough: in places like "
+    "California, wildfires, car emissions, and industrial pollution can overwhelm grid progress, and "
+    "in Texas, solar is growing alongside oil and gas rather than fully replacing it."
 )
