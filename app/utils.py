@@ -305,7 +305,7 @@ def load_homepage_map_data() -> pd.DataFrame:
 
 def compute_metrics(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy().sort_values(["state", "date"])
-    df["energy_kwh"] = df["energy_btu"] / BTU_PER_KWH
+    df["energy_kwh"] = df["energy_btu"] * BTU_SERIES_SCALE / BTU_PER_KWH
     df["year_over_year_change"] = df.groupby("state")["energy_btu"].pct_change().fillna(0)
     return df
 
@@ -535,6 +535,30 @@ def time_series_chart(state_df: pd.DataFrame, metric: str) -> go.Figure:
     )
     fig.update_traces(line=dict(width=3))
     fig.update_layout(height=310, margin=dict(l=10, r=10, t=45, b=10), hovermode="x unified")
+    return fig
+
+
+def solar_production_comparison_chart(map_df: pd.DataFrame, selected_abbr: str) -> go.Figure:
+    solar_df = map_df.dropna(subset=["solar_production"]).copy()
+    solar_df = solar_df.nlargest(21, "solar_production").sort_values("solar_production")
+    solar_df["color_group"] = np.where(solar_df["state_abbr"] == selected_abbr, "Selected state", "Other states")
+
+    fig = px.bar(
+        solar_df,
+        x="solar_production",
+        y="state_abbr",
+        orientation="h",
+        color="color_group",
+        color_discrete_map={"Selected state": "#22c55e", "Other states": "#94a3b8"},
+        labels={"solar_production": "Estimated solar production (kWh)", "state_abbr": "State"},
+        title="Estimated solar production across states with available data",
+    )
+    fig.update_layout(
+        height=430,
+        margin=dict(l=10, r=10, t=45, b=10),
+        showlegend=False,
+        xaxis_tickformat=",",
+    )
     return fig
 
 
