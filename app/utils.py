@@ -245,11 +245,13 @@ def render_homepage_map_cards(map_df: pd.DataFrame) -> None:
     top_consumption = map_df.nlargest(1, "energy_consumption").iloc[0]
     top_solar = map_df.nlargest(1, "solar_production").iloc[0]
 
-    cols = st.columns(4)
-    cols[0].metric("States with overlap", f"{len(map_df)}")
-    cols[1].metric("Total consumption", f"{map_df['energy_consumption'].sum():,.0f}")
-    cols[2].metric("Top consumption", f"{top_consumption['state_abbr']} - {top_consumption['energy_consumption']:,.0f}")
-    cols[3].metric("Top solar production", f"{top_solar['state_abbr']} - {top_solar['solar_production']:,.0f}")
+    top_row = st.columns(2)
+    top_row[0].metric("States with overlap", f"{len(map_df)}")
+    top_row[1].metric("Total consumption (MWh)", f"{map_df['energy_consumption'].sum():,.0f}")
+
+    bottom_row = st.columns(2)
+    bottom_row[0].metric("Top consumption", f"{top_consumption['state_abbr']} - {top_consumption['energy_consumption']:,.0f} MWh")
+    bottom_row[1].metric("Top solar production", f"{top_solar['state_abbr']} - {top_solar['solar_production']:,.0f} kWh")
 
 
 def energy_solar_overlay_map(map_df: pd.DataFrame) -> go.Figure:

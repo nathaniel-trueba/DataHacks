@@ -16,8 +16,8 @@ apply_light_mode_background()
 
 st.title("Heat Trace")
 st.caption(
-    "A hackathon-ready data app for exploring how U.S. energy activity, solar adoption, "
-    "and environmental indicators move together across states."
+    "State-level variation in U.S. energy consumption and solar production reveals where "
+    "solar meaningfully offsets demand and where its impact remains marginal."
 )
 
 map_df = load_homepage_map_data()
