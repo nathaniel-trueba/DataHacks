@@ -43,12 +43,12 @@ state_df = df[df["state"] == selected_state].sort_values("date")
 
 latest = state_df.iloc[-1]
 first = state_df.iloc[0]
-peak = state_df.loc[state_df["energy_btu"].idxmax()]
+peak = state_df.loc[state_df["energy_kwh"].idxmax()]
 cols = st.columns(4)
-cols[0].metric("Latest energy", f"{latest['energy_btu']:,.0f}")
-cols[1].metric("Latest energy (kWh)", f"{latest['energy_kwh']:,.0f}")
-cols[2].metric("Peak year", f"{int(peak['year'])}")
-cols[3].metric("Latest YoY change", f"{latest['year_over_year_change']:.1%}")
+cols[0].metric("Latest energy (kWh)", f"{latest['energy_kwh']:,.0f}")
+cols[1].metric("Peak year", f"{int(peak['year'])}")
+cols[2].metric("Latest YoY change", f"{latest['year_over_year_change']:.1%}")
+cols[3].metric("Years shown", f"{state_df['year'].nunique()}")
 
 st.subheader(selected_state)
 st.write(state_summary(state_df))

@@ -28,7 +28,7 @@ METRIC_LABELS = {
     "year_over_year_change": "Year-over-year change",
 }
 
-CHART_METRICS = ["energy_btu", "energy_kwh", "year_over_year_change"]
+CHART_METRICS = ["energy_kwh", "year_over_year_change"]
 
 STATE_NAME_BY_ABBR = {
     "AK": "Alaska",
