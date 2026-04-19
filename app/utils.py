@@ -354,11 +354,10 @@ def render_homepage_map_cards(map_df: pd.DataFrame) -> None:
     top_consumption = energy_df.nlargest(1, "energy_consumption_kwh").iloc[0]
     top_solar = solar_df.nlargest(1, "solar_production").iloc[0]
 
-    top_row = st.columns(4)
+    top_row = st.columns(3)
     top_row[0].metric("States with energy data", f"{len(energy_df)}")
     top_row[1].metric("States with solar data", f"{len(solar_df)}")
     top_row[2].metric("States with both", f"{overlap_count}")
-    top_row[3].metric("Total consumption (kWh)", f"{energy_df['energy_consumption_kwh'].sum():,.0f}")
 
     bottom_row = st.columns(2)
     bottom_row[0].metric("Top consumption", f"{top_consumption['state_abbr']} - {top_consumption['energy_consumption_kwh']:,.0f} kWh")

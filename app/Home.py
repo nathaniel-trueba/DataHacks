@@ -16,8 +16,12 @@ apply_light_mode_background()
 
 st.title("Heat Trace")
 st.caption(
+    "Heat Trace is a data analytics and machine learning project for DataHacks 2026. "
+    "Our model predicts ... "
     "State-level variation in U.S. energy consumption and solar production reveals where "
-    "solar meaningfully offsets demand and where its impact remains marginal."
+    "solar meaningfully offsets demand and where its impact remains marginal. "
+    "A kilowatt hour, or kWh, is a measure of energy use: one kWh is the energy needed to "
+    "run a 1,000-watt appliance for one hour."
 )
 
 map_df = load_homepage_map_data()
