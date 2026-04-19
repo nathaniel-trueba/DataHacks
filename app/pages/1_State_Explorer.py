@@ -13,6 +13,7 @@ from utils import (
     CHART_METRICS,
     METRIC_LABELS,
     apply_light_mode_background,
+    load_homepage_map_data,
     load_state_timeseries,
     state_summary,
     time_series_chart,
@@ -23,9 +24,12 @@ st.set_page_config(page_title="Heat Trace | State Explorer", layout="wide")
 apply_light_mode_background()
 
 st.title("State Explorer")
-st.caption("Explore annual state energy consumption and year-over-year change from the clean dataset.")
+st.caption("Explore annual energy consumption for the states with both energy and solar production coverage.")
 
 df = load_state_timeseries()
+map_df = load_homepage_map_data()
+covered_abbrs = set(map_df["state_abbr"])
+df = df[df["state_abbr"].isin(covered_abbrs)].copy()
 states = df["state"].drop_duplicates().sort_values().tolist()
 
 selector_col, _ = st.columns([1, 2])
