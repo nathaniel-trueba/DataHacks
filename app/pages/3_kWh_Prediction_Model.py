@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -12,6 +13,7 @@ import streamlit as st
 APP_DIR = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = APP_DIR.parent
 FORECAST_PATH = APP_DIR / "us_10yr_monthly_cluster_forecast_with_irridance.csv"
+US_STATES_GEOJSON_PATH = APP_DIR / "assets" / "us-states.json"
 
 if str(APP_DIR) not in sys.path:
     sys.path.append(str(APP_DIR))
@@ -20,7 +22,6 @@ from utils import (
     HEAT_AMBER,
     HEAT_CONTINUOUS_SCALE,
     HEAT_MUTED,
-    HEAT_SURFACE,
     HEAT_TEXT,
     apply_heat_trace_theme,
 )
@@ -116,32 +117,9 @@ def build_selected_monthly_table(
 
 
 @st.cache_data
-def build_grid_geojson(grid_df: pd.DataFrame, half_size: float = 0.55) -> dict:
-    features = []
-    for row in grid_df.itertuples(index=False):
-        lat = float(row.cluster_lat)
-        lon = float(row.cluster_lon)
-        cluster_id = str(int(row.cluster_id))
-        features.append(
-            {
-                "type": "Feature",
-                "id": cluster_id,
-                "properties": {"cluster_id": cluster_id},
-                "geometry": {
-                    "type": "Polygon",
-                    "coordinates": [
-                        [
-                            [lon - half_size, lat - half_size],
-                            [lon + half_size, lat - half_size],
-                            [lon + half_size, lat + half_size],
-                            [lon - half_size, lat + half_size],
-                            [lon - half_size, lat - half_size],
-                        ]
-                    ],
-                },
-            }
-        )
-    return {"type": "FeatureCollection", "features": features}
+def load_us_states_geojson() -> dict:
+    with US_STATES_GEOJSON_PATH.open() as f:
+        return json.load(f)
 
 
 def render_prediction_grid_map(
@@ -150,39 +128,54 @@ def render_prediction_grid_map(
     selected_location: str,
 ) -> go.Figure:
     fig = go.Figure()
-    grid_geojson = build_grid_geojson(grid_df)
+    states_geojson = load_us_states_geojson()
+    state_ids = [feature["id"] for feature in states_geojson["features"]]
 
     fig.add_trace(
         go.Choropleth(
-            geojson=grid_geojson,
-            locations=grid_df["cluster_id"].astype(str),
-            z=grid_df["predicted_annual_kwh"],
+            geojson=states_geojson,
+            locations=state_ids,
+            z=[1] * len(state_ids),
             featureidkey="id",
-            colorscale=HEAT_CONTINUOUS_SCALE,
-            marker_line_color="rgba(246, 236, 221, 0.18)",
-            marker_line_width=0.35,
-            colorbar=dict(
-                title=dict(text="Predicted kWh", font=dict(color=HEAT_MUTED)),
-                tickfont=dict(color=HEAT_MUTED),
-                bgcolor="rgba(0,0,0,0)",
-                outlinecolor="rgba(246, 236, 221, 0.18)",
+            colorscale=[[0, "rgba(246, 236, 221, 0.12)"], [1, "rgba(246, 236, 221, 0.12)"]],
+            marker_line_color="rgba(246, 236, 221, 0.34)",
+            marker_line_width=0.7,
+            showscale=False,
+            hoverinfo="skip",
+        )
+    )
+
+    fig.add_trace(
+        go.Scattergeo(
+            lat=grid_df["cluster_lat"],
+            lon=grid_df["cluster_lon"],
+            mode="markers",
+            marker=dict(
+                symbol="square",
+                size=15,
+                color=grid_df["predicted_annual_kwh"],
+                colorscale=HEAT_CONTINUOUS_SCALE,
+                opacity=0.72,
+                line=dict(color="rgba(246, 236, 221, 0.18)", width=0.45),
+                colorbar=dict(
+                    title=dict(text="Predicted kWh", font=dict(color=HEAT_MUTED)),
+                    tickfont=dict(color=HEAT_MUTED),
+                    bgcolor="rgba(0,0,0,0)",
+                    outlinecolor="rgba(246, 236, 221, 0.18)",
+                ),
             ),
             customdata=np.stack(
-                [
-                    grid_df["cluster_lat"],
-                    grid_df["cluster_lon"],
-                    grid_df["avg_temp_c"],
-                    grid_df["avg_irradiance"],
-                ],
+                [grid_df["cluster_id"], grid_df["avg_temp_c"], grid_df["avg_irradiance"]],
                 axis=-1,
             ),
             hovertemplate=(
-                "Forecast grid %{location}<br>"
-                "Predicted annual production: %{z:,.0f} kWh<br>"
-                "Lat/Lon: %{customdata[0]:.2f}, %{customdata[1]:.2f}<br>"
-                "Avg temp: %{customdata[2]:.1f} C<br>"
-                "Avg irradiance: %{customdata[3]:.2f}<extra></extra>"
+                "Forecast grid %{customdata[0]}<br>"
+                "Predicted annual production: %{marker.color:,.0f} kWh<br>"
+                "Lat/Lon: %{lat:.2f}, %{lon:.2f}<br>"
+                "Avg temp: %{customdata[1]:.1f} C<br>"
+                "Avg irradiance: %{customdata[2]:.2f}<extra></extra>"
             ),
+            showlegend=False,
         )
     )
 
@@ -211,8 +204,9 @@ def render_prediction_grid_map(
         projection_type="albers usa",
         bgcolor="rgba(0,0,0,0)",
         showland=True,
-        landcolor=HEAT_SURFACE,
-        showlakes=False,
+        landcolor="rgba(246, 236, 221, 0.06)",
+        showlakes=True,
+        lakecolor="rgba(5, 4, 3, 0.6)",
         showocean=False,
         showcoastlines=False,
         showcountries=False,
