@@ -42,7 +42,7 @@ consumption_col, solar_col = st.columns(2)
 with consumption_col:
     st.write("Energy consumption")
     st.dataframe(
-        homepage_rankings(map_df, "energy_consumption").style.format({"Value": "{:,.0f}"}),
+        homepage_rankings(map_df, "energy_consumption_kwh").style.format({"Value (kWh)": "{:,.0f}"}),
         use_container_width=True,
         hide_index=True,
     )
@@ -50,7 +50,7 @@ with consumption_col:
 with solar_col:
     st.write("Estimated solar production")
     st.dataframe(
-        homepage_rankings(map_df, "solar_production").style.format({"Value": "{:,.0f}"}),
+        homepage_rankings(map_df, "solar_production").style.format({"Value (kWh)": "{:,.0f}"}),
         use_container_width=True,
         hide_index=True,
     )

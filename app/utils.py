@@ -16,6 +16,7 @@ DATA_PATH = PROJECT_ROOT / "data" / "processed" / "clean_energy_data.csv"
 HOME_MAP_DATA_PATH = PROJECT_ROOT / "data" / "processed" / "homepage_mapdata.csv"
 US_STATES_GEOJSON_PATH = PROJECT_ROOT / "app" / "assets" / "us-states.json"
 BTU_PER_KWH = 3412.142
+BTU_SERIES_SCALE = 1_000_000_000
 
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
@@ -282,10 +283,11 @@ def load_homepage_map_data() -> pd.DataFrame:
     energy_df = energy_df.rename(columns={"state": "state_abbr"}).copy()
     energy_df["state_abbr"] = energy_df["state_abbr"].str.upper().str.strip()
     energy_df["energy_consumption"] = pd.to_numeric(energy_df["energy_btu"], errors="coerce")
+    energy_df["energy_consumption_kwh"] = energy_df["energy_consumption"] * BTU_SERIES_SCALE / BTU_PER_KWH
     latest_year = int(energy_df["year"].max())
     energy_latest = energy_df[
         (energy_df["year"] == latest_year) & (energy_df["state_abbr"].isin(US_STATE_ABBRS))
-    ][["state_abbr", "energy_consumption"]]
+    ][["state_abbr", "energy_consumption", "energy_consumption_kwh"]]
 
     solar_df = pd.read_csv(HOME_MAP_DATA_PATH)
     solar_df = solar_df.rename(columns={"state": "state_abbr"}).copy()
@@ -349,28 +351,28 @@ def render_homepage_map_cards(map_df: pd.DataFrame) -> None:
     energy_df = map_df.dropna(subset=["energy_consumption"])
     solar_df = map_df.dropna(subset=["solar_production"])
     overlap_count = int((map_df["has_energy"] & map_df["has_solar"]).sum())
-    top_consumption = energy_df.nlargest(1, "energy_consumption").iloc[0]
+    top_consumption = energy_df.nlargest(1, "energy_consumption_kwh").iloc[0]
     top_solar = solar_df.nlargest(1, "solar_production").iloc[0]
 
     top_row = st.columns(4)
     top_row[0].metric("States with energy data", f"{len(energy_df)}")
     top_row[1].metric("States with solar data", f"{len(solar_df)}")
     top_row[2].metric("States with both", f"{overlap_count}")
-    top_row[3].metric("Total consumption (BTU)", f"{energy_df['energy_consumption'].sum():,.0f}")
+    top_row[3].metric("Total consumption (kWh)", f"{energy_df['energy_consumption_kwh'].sum():,.0f}")
 
     bottom_row = st.columns(2)
-    bottom_row[0].metric("Top consumption", f"{top_consumption['state_abbr']} - {top_consumption['energy_consumption']:,.0f} BTU")
+    bottom_row[0].metric("Top consumption", f"{top_consumption['state_abbr']} - {top_consumption['energy_consumption_kwh']:,.0f} kWh")
     bottom_row[1].metric("Top solar production", f"{top_solar['state_abbr']} - {top_solar['solar_production']:,.0f} kWh")
 
 
 def energy_solar_overlay_map(map_df: pd.DataFrame) -> go.Figure:
-    energy_df = map_df.dropna(subset=["energy_consumption"]).copy()
+    energy_df = map_df.dropna(subset=["energy_consumption_kwh"]).copy()
     solar_df = map_df.dropna(subset=["solar_production"]).copy()
     us_states_geojson = load_us_states_geojson()
     energy_df["solar_display"] = energy_df["solar_production"].map(
-        lambda value: f"{value:,.0f}" if pd.notna(value) else "Not available"
+        lambda value: f"{value:,.0f} kWh" if pd.notna(value) else "Not available"
     )
-    solar_df["energy_display"] = solar_df["energy_consumption"].map(
+    solar_df["energy_display"] = solar_df["energy_consumption_kwh"].map(
         lambda value: f"{value:,.0f}" if pd.notna(value) else "Not available"
     )
     data_states = set(energy_df["state_abbr"]) | set(solar_df["state_abbr"])
@@ -398,15 +400,15 @@ def energy_solar_overlay_map(map_df: pd.DataFrame) -> go.Figure:
             locations=energy_df["state_abbr"],
             geojson=us_states_geojson,
             featureidkey="id",
-            z=energy_df["energy_consumption"],
+            z=energy_df["energy_consumption_kwh"],
             colorscale="YlOrRd",
             marker_line_color="rgba(255, 255, 255, 0.85)",
             marker_line_width=0.9,
-            colorbar=dict(title="Energy consumption (BTU)"),
+            colorbar=dict(title="Energy consumption (kWh)"),
             customdata=np.stack([energy_df["solar_display"]], axis=-1),
             hovertemplate=(
                 "%{location}<br>"
-                "Energy consumption: %{z:,.0f}<br>"
+                "Energy consumption: %{z:,.0f} kWh<br>"
                 "Solar production: %{customdata[0]}<extra></extra>"
             ),
             name="Energy consumption",
@@ -432,8 +434,8 @@ def energy_solar_overlay_map(map_df: pd.DataFrame) -> go.Figure:
                 customdata=np.stack([solar_df["solar_production"], solar_df["energy_display"]], axis=-1),
                 hovertemplate=(
                     "%{text}<br>"
-                    "Solar production: %{customdata[0]:,.0f}<br>"
-                    "Energy consumption: %{customdata[1]}<extra></extra>"
+                    "Solar production: %{customdata[0]:,.0f} kWh<br>"
+                    "Energy consumption: %{customdata[1]} kWh<extra></extra>"
                 ),
                 name="Solar production",
             )
@@ -463,10 +465,11 @@ def energy_solar_overlay_map(map_df: pd.DataFrame) -> go.Figure:
 
 
 def homepage_rankings(map_df: pd.DataFrame, metric: str, n: int = 5) -> pd.DataFrame:
+    value_label = "Value (kWh)" if metric in {"energy_consumption_kwh", "solar_production"} else "Value"
     return (
         map_df.dropna(subset=[metric])
         .nlargest(n, metric)[["state_abbr", metric]]
-        .rename(columns={"state_abbr": "State", metric: "Value"})
+        .rename(columns={"state_abbr": "State", metric: value_label})
         .reset_index(drop=True)
     )
 
