@@ -329,8 +329,6 @@ monthly_df, cluster = build_selected_monthly_table(
 )
 selected_cell = grid_df[grid_df["cluster_id"] == cluster["cluster_id"]].iloc[0]
 monthly_kwh = selected_cell["predicted_monthly_kwh"]
-days_in_month = pd.Timestamp(year=selected_year, month=selected_month, day=1).days_in_month
-daily_average = monthly_kwh / days_in_month
 per_kw_output = monthly_kwh / capacity_kw
 best_month = monthly_df.loc[monthly_df["predicted_monthly_kwh"].idxmax()]
 lowest_month = monthly_df.loc[monthly_df["predicted_monthly_kwh"].idxmin()]
@@ -338,7 +336,6 @@ best_grid_cell = grid_df.iloc[0]
 
 with output_col:
     st.metric("Predicted avg monthly production", f"{monthly_kwh:,.0f} kWh")
-    st.metric("Average daily production", f"{daily_average:,.0f} kWh")
     st.metric("Forecast region", f"#{int(cluster['cluster_id'])}")
     st.write(
         f"A {capacity_kw:g} kW system near {selected_location} is estimated to produce "
